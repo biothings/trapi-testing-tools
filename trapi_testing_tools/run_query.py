@@ -228,7 +228,7 @@ def manage_query(
 
     console.pop_render_hook()
     console.print(
-        f"└ {'[green]✓ Passed[/]' if passed else '[red]x Failed[/]'}",
+        f"└ {'[green]✓ Tests Passed[/]' if passed else '[red]x Failed[/]'}",
         style="rule.line",
         markup=True,
     )
