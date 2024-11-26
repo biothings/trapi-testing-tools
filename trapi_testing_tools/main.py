@@ -154,7 +154,7 @@ def test(
         console.print(
             f"Environment must be one of {(', '.join(EnvironmentMapping.keys()))}"
         )
-        typer.Exit(1)
+        raise typer.Exit(1)
 
     view_mode = "prompt"
     save_mode = "prompt"
@@ -167,7 +167,7 @@ def test(
     if pipe:
         if len(queries) > 1:
             console.print("Pipe mode only supported for single queries.")
-            typer.Exit(1)
+            raise typer.Exit(1)
         view_mode = "pipe"
         save_mode = "skip"
 
@@ -301,7 +301,7 @@ def ping(
     if app not in config["environments"]:
         valid_apps = ", ".join(key for key in config["environments"])
         console.print(f"App must be one of configured apps: {valid_apps}")
-        typer.Exit(1)
+        raise typer.Exit(1)
 
     if app == "default":
         app = config["environments"]["default"]
