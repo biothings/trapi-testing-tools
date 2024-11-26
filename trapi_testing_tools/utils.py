@@ -104,9 +104,9 @@ async def check_api(instance_name, instance_url, max_name_len, progress):
     task = progress.add_task(f" {instance_name:>{max_name_len}} querying...", total=1)
     try:
         response = await ASYNC_BASIC_CLIENT.get(
-            f"{instance_url}/asyncquery_status/HopefullyNonExistentHash", timeout=10
+            f"{instance_url}/query", timeout=10
         )
-        if not response.status_code == 404:
+        if not response.status_code == 405:
             response.raise_for_status()
         time = round(response.elapsed.total_seconds() * 1000)
         progress.update(
