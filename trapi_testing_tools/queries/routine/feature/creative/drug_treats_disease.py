@@ -2,7 +2,7 @@ from trapi_testing_tools.tests import http, kg, results, logs
 
 # Using nephrotic syndrome as an example
 method = "POST"
-endpoint = "/v1/asyncquery"
+endpoint = "/asyncquery"
 body = {
     "submitter": "bte-dev-tester-manual",
     "message": {

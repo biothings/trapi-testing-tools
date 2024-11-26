@@ -15,7 +15,7 @@ query_body = {
 steps = [
     dict(
         method="POST",
-        endpoint="/v1/query",
+        endpoint="/query",
         params=dict(caching=False),
         body=query_body,
         tests=[
@@ -28,7 +28,7 @@ steps = [
     ),
     dict(
         method="POST",
-        endpoint="/v1/query",
+        endpoint="/query",
         params=dict(caching=False),
         body=query_body,
         tests=[

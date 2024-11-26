@@ -1,7 +1,7 @@
 from trapi_testing_tools.tests import kg, results, logs, http
 
 method = "POST"
-endpoint = "/v1/query"
+endpoint = "/query"
 body = {
     "submitter": "bte-dev-tester-manual",
     "message": {

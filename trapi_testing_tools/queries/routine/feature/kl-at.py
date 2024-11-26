@@ -1,7 +1,7 @@
 from trapi_testing_tools.tests import http, kg, results, logs
 
 method = "POST"
-endpoint = "/v1/smartapi/38e9e5169a72aee3659c9ddba956790d/query"
+endpoint = "/smartapi/38e9e5169a72aee3659c9ddba956790d/query"
 body = {
     "message": {
         "query_graph": {

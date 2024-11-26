@@ -3,7 +3,7 @@ import httpx
 from trapi_testing_tools.tests import http
 
 method = "POST"
-endpoint = "/v1/asyncquery"
+endpoint = "/asyncquery"
 body = {
     "message": {
         "query_graph": {

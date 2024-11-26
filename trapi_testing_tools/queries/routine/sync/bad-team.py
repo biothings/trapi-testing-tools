@@ -3,7 +3,7 @@ import httpx
 from trapi_testing_tools.tests import http
 
 method = "POST"
-endpoint = "/v1/team/lalala/query"
+endpoint = "/team/lalala/query"
 body = {
     "submitter": "bte-dev-tester-manual",
     "message": {

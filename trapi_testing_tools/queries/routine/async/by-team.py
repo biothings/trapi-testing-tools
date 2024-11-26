@@ -1,7 +1,7 @@
 from trapi_testing_tools.tests import http, kg, results, logs
 
 method = "POST"
-endpoint = "/v1/team/Text%20Mining%20Provider/asyncquery"
+endpoint = "/team/Text%20Mining%20Provider/asyncquery"
 body = {
     "submitter": "bte-dev-tester-manual",
     "message": {

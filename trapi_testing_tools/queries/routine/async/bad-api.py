@@ -1,7 +1,7 @@
 from trapi_testing_tools.tests import http, logs
 
 method = "POST"
-endpoint = "/v1/smartapi/lalala/asyncquery"
+endpoint = "/smartapi/lalala/asyncquery"
 body = {
     "submitter": "bte-dev-tester-manual",
     "message": {

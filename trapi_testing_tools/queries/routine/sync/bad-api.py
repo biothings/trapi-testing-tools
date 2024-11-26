@@ -2,7 +2,7 @@ import httpx
 from trapi_testing_tools.tests import http, logs
 
 method = "POST"
-endpoint = "/v1/smartapi/lalala/query"
+endpoint = "/smartapi/lalala/query"
 body = {
     "submitter": "bte-dev-tester-manual",
     "message": {

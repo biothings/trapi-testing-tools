@@ -1,7 +1,7 @@
 from trapi_testing_tools.tests import http, kg, results, logs
 
 method = "POST"
-endpoint = "/v1/asyncquery"
+endpoint = "/asyncquery"
 body = {
     "message": {
         "query_graph": {

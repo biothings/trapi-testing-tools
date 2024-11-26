@@ -1,7 +1,7 @@
 from trapi_testing_tools.tests import http, kg, results, logs
 
 method = "POST"
-endpoint = "/v1/smartapi/d22b657426375a5295e7da8a303b9893/asyncquery"
+endpoint = "/smartapi/d22b657426375a5295e7da8a303b9893/asyncquery"
 body = {
     "submitter": "bte-dev-tester-manual",
     "message": {

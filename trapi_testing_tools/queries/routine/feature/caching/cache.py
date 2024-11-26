@@ -18,7 +18,7 @@ query_body = {
 steps = [
     dict(
         method="POST",
-        endpoint="/v1/query",
+        endpoint="/query",
         body=query_body,
         tests=[
             http.status(200),
@@ -30,7 +30,7 @@ steps = [
     ),
     dict(
         method="POST",
-        endpoint="/v1/query",
+        endpoint="/query",
         body=query_body,
         tests=[
             http.status(200),
