@@ -14,6 +14,10 @@ from trapi_testing_tools.retrieve_by_pk import get_response_from_pk
 from trapi_testing_tools.run_query import run_queries
 from trapi_testing_tools.utils import EnvironmentMapping
 from typer.core import TyperGroup
+from trapi_testing_tools.utils import (
+    check_apps_responsive,
+    config,
+)
 
 console = Console(stderr=True)
 
@@ -280,6 +284,33 @@ def pk(
         save,
     )
     pass
+
+
+@app.command(
+    "ping | p", help="Quickly check if servers are responsive by getting their metakg."
+)
+def ping(
+    app: Annotated[
+        str,
+        typer.Argument(help="Which app to check (all instances will be checked)."),
+    ] = config["environments"]["default"],
+    all: Annotated[
+        bool, typer.Option("--all", "-a", help="Check all instances of all apps.")
+    ] = False,
+):
+    if app not in config["environments"]:
+        valid_apps = ", ".join(key for key in config["environments"])
+        console.print(f"App must be one of configured apps: {valid_apps}")
+        typer.Exit(1)
+
+    if app == "default":
+        app = config["environments"]["default"]
+
+    apps: list[tuple[str, dict]] = [(app, config["environments"][app])]
+    if all:
+        apps = list(config["environments"].items())
+
+    check_apps_responsive(apps)
 
 
 def main():

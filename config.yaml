@@ -8,3 +8,9 @@ environments:
     ci: https://bte.ci.transltr.io/v1
     test: https://bte.test.transltr.io/v1
     prod: https://bte.transltr.io/v1
+  aragorn:
+    local: http://localhost:5000/aragorn
+    dev: https://aragorn.renci.org/aragorn
+    ci: https://aragorn.ci.transltr.io/aragorn
+    test: https://aragorn.test.transltr.io/aragorn
+    prod: https://aragorn.transltr.io/aragorn
