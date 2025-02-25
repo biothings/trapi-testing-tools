@@ -6,16 +6,17 @@ A set of command-line tools for rapidly testing and analyzing various TRAPI reso
 
 Install fx: [https://fx.wtf/install](https://fx.wtf/install)
 
-This project uses Poetry for package/dependency management. Install instructions: [https://python-poetry.org/docs/](https://python-poetry.org/docs/)
+This project uses uv for package/dependency management. Install instructions: [https://docs.astral.sh/uv/getting-started/installation/](https://docs.astral.sh/uv/getting-started/installation/)
 
 Clone and set up workspace:
 
 ```bash
 git clone https://github.com/biothings/trapi-testing-tools
 cd trapi-testing-tools
-poetry install
+uv sync
 # Get into the virtual environment
-poetry shell
+source .venv/bin/activate
+# Alternatively, you can prepend `uv run` to all commands in subsequent sections
 ```
 
 ## Usage
