@@ -1,5 +1,6 @@
 ---
 timeout: 300
+test_repo: NCATSTranslator/Tests
 environments:
   default: bte
   bte:
@@ -14,3 +15,5 @@ environments:
     ci: https://aragorn.ci.transltr.io/aragorn
     test: https://aragorn.test.transltr.io/aragorn
     prod: https://aragorn.transltr.io/aragorn
+  retriever:
+    local: http://localhost:3000

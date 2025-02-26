@@ -63,6 +63,7 @@ def run_query(query: dict, url: str) -> tuple[Union[httpx.Response, None], bool]
                 method=cast(str, query.get("method")),
                 url=url + cast(str, query.get("endpoint")),
                 params=query.get("params", None),
+                headers=query.get("headers", None),
                 json=query.get("body", None),
             )
 
@@ -74,7 +75,7 @@ def run_query(query: dict, url: str) -> tuple[Union[httpx.Response, None], bool]
         if "asyncquery" not in cast(str, query.get("endpoint")):
             return response, passed
 
-        status_url = body["job_url"]
+        status_url = url + "/asyncquery_status/" + body["job_id"]
         status = body["status"]
         # Poll for response from async status endpoint
         with console.status("Polling status endpoint every 10s...") as task_status:
@@ -137,10 +138,10 @@ def run_tests(query: dict, response: httpx.Response, passed: bool) -> bool:
             failure_report = test(response)  # Returns report if failed otherwise None
 
             if not failure_report:
-                console.print(f"[green]✓[/] {i+1}. {test.__name__}")
+                console.print(f"[green]✓[/] {i + 1}. {test.__name__}")
                 continue
 
-            console.print(f"[red]x[/] {i+1}. {test.__name__}")
+            console.print(f"[red]x[/] {i + 1}. {test.__name__}")
             passed = False
             report_visual = Panel(
                 Pretty(failure_report),
@@ -154,7 +155,7 @@ def run_tests(query: dict, response: httpx.Response, passed: bool) -> bool:
 
         except Exception as error:
             console.print(
-                f"[red]![/] {i+1}. {test.__name__}: An error occurred in this test: {repr(error)}"
+                f"[red]![/] {i + 1}. {test.__name__}: An error occurred in this test: {repr(error)}"
             )
             with redirect_stdout(stderr):
                 if inquirer.confirm(
@@ -195,6 +196,7 @@ def manage_query(
         queries = [
             dict(
                 method=getattr(query_module, "method", None),
+                headers=getattr(query_module, "headers", None),
                 endpoint=getattr(query_module, "endpoint", None),
                 params=getattr(query_module, "params", None),
                 body=getattr(query_module, "body", None),

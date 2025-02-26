@@ -1,22 +1,25 @@
+import re
+import sys
 from contextlib import redirect_stdout
 from pathlib import Path
-import re
 from sys import stderr
-import sys
-from typing import Annotated, Optional, assert_type
+from typing import Annotated, Optional, cast
 
 import typer
 from InquirerPy import inquirer
 from rich.console import Console
+from typer.core import TyperGroup
 
 from trapi_testing_tools import queries as query_list
 from trapi_testing_tools.retrieve_by_pk import get_response_from_pk
 from trapi_testing_tools.run_query import run_queries
-from trapi_testing_tools.utils import EnvironmentMapping
-from typer.core import TyperGroup
+from trapi_testing_tools.types import LogLevel, TestType
 from trapi_testing_tools.utils import (
+    EnvironmentMapping,
+    cache_tests,
     check_apps_responsive,
     config,
+    select_tests,
 )
 
 console = Console(stderr=True)
@@ -45,7 +48,6 @@ app = typer.Typer(
 )
 
 # TODO: --analyze to auto-pass to analysis (and/or support analysis in the test definition)
-# TODO: --asset # to auto-retrieve a test asset and use it instead
 # TODO: --validate to auto-pass to validation
 
 
@@ -111,6 +113,7 @@ def test(
         ),
     ] = False,
 ):
+    cache_tests()
     used_interactive = False
 
     if all:
@@ -214,8 +217,91 @@ def validate():
 
 
 @app.command("harness | h")
-def harness():
-    pass
+def harness(
+    name: Annotated[Optional[list[str]], typer.Argument(help="")] = None,
+    environment: Annotated[
+        Optional[str],
+        typer.Option(
+            "--environment",
+            "--env",
+            "-e",
+            help="Set the environment to use (e.g. bte.prod).",
+        ),
+    ] = None,
+    log_level: LogLevel = typer.Option(  # Have to define differently due to fun Typer problems
+        "WARNING",
+        "--log-level",
+        "-l",
+        help="Level of logs to print.",
+        case_sensitive=False,
+    ),
+    test_type: Optional[TestType] = typer.Option(
+        None,
+        "--test-type",
+        "--type",
+        "-t",
+        help="Type of test to run. A case is a collection of assets; A suite is a collection of cases. ",
+    ),
+    out: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--out",
+            "-o",
+            help="Path to save the report to. Additional files will save to this path with a suffix.",
+        ),
+    ] = None,
+):
+    cache_tests()
+    used_interactive = False  # TODO: output hint if interactive mode used
+    if environment is None:
+        with redirect_stdout(stderr):
+            environment = inquirer.fuzzy(
+                message="Select environment...",
+                choices=[key for key in EnvironmentMapping.keys() if "." in key],
+                instruction="(Type to filter, Tab to select, Enter to confirm)",
+                border=True,
+            ).execute()
+        used_interactive = True
+
+    if environment not in EnvironmentMapping.keys():
+        console.print(
+            f"Environment must be one of {(', '.join(EnvironmentMapping.keys()))}"
+        )
+        typer.Exit(1)
+
+    if name is not None and test_type is None:
+        test_type = TestType.suite
+
+    if test_type is None:
+        test_type = TestType[
+            inquirer.fuzzy(
+                message="Select test type...",
+                choices=[e.value for e in TestType],
+                border=True,
+                instruction="(Type to filter, Tab to select, Enter to confirm)",
+                info=True,
+            ).execute()
+        ]
+
+    tests: list[Path] = []
+    if name is None:
+        try:
+            tests = select_tests(cast(TestType, test_type).value)
+        except Exception:
+            console.print_exception(show_locals=True)
+            console.print(
+                "An error occurred while selecting tests. Please see the above traceback for more information."
+            )
+
+    tests = tests if name is None else [Path(path) for path in name]
+    print(tests)  # TODO remove
+
+    if used_interactive:
+        # TODO print out a command hint to re-do this exact setup
+        pass
+
+    # TODO: run through tests
+    # AKA integrate the harness code
 
 
 @app.command(

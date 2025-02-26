@@ -69,6 +69,7 @@ from trapi_testing_tools.tests import http
 
 method = "POST"  # Use any HTTP method here
 endpoint = "/v1/query"  # The endpoint to be applied to the tool
+headers = {}  # You can optionally specify headers
 params = {...}  # You can optionally pass URL parameters as a dictionary of param_name: value
 body = {...}  # You can optionally add a body in the form of a dictionary
 tests = [http.status(200)]  # You can optionally set tests to validate the response
