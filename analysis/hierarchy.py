@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-import sys
 import json
+import sys
 
 # Load response from pipe
 response_str = ""
@@ -25,8 +25,7 @@ def pprint(obj: dict):
 
 def create_edge_hierarchy(kedge_id: str, depth=1):
     global max_depth
-    if depth > max_depth:
-        max_depth = depth
+    max_depth = max(depth, max_depth)
     if max_depth > 4:  # We don't want to see this happen
         exit(1)
     kedge = kg["edges"][kedge_id]

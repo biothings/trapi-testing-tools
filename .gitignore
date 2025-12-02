@@ -1,6 +1,8 @@
 .DS_Store
-working/*
 __pycache__
 .vscode
 .mypy_cache
 .venv
+queries/*
+!queries/routine
+!queries/additional

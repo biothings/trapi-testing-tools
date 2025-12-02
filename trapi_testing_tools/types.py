@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Literal
 
 
 class LogLevel(Enum):
@@ -12,3 +13,9 @@ class TestType(Enum):
     asset = "asset"
     case = "case"
     suite = "suite"
+
+
+ViewMode = Literal["prompt", "skip", "every", "pipe"]
+SaveMode = Literal["prompt", "skip", "every"]
+
+OutputModes = tuple[ViewMode, SaveMode]

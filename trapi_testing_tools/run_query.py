@@ -1,28 +1,28 @@
 import importlib
 import time
+from collections.abc import Callable
 from contextlib import redirect_stdout
 from pathlib import Path
 from sys import stderr
 from types import ModuleType
-from typing import Callable, Literal, Optional, Union, cast
+from typing import Literal, cast
 
 import httpx
-from rich.text import Text
 import yaml
 from InquirerPy import inquirer
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.pretty import Pretty
+from rich.text import Text
 
 import trapi_testing_tools
+from trapi_testing_tools.types import OutputModes, SaveMode, ViewMode
 from trapi_testing_tools.utils import IndentedBlock, handle_output
 
 console = Console(stderr=True)
 
-with open(
-    Path(__file__).parent.joinpath("../config.yaml").resolve(), "r"
-) as config_file:
+with open(Path(__file__).parent.joinpath("../config.yaml").resolve()) as config_file:
     config = yaml.safe_load(config_file)
 
 CLIENT = httpx.Client(follow_redirects=True, timeout=config["timeout"])
@@ -48,9 +48,9 @@ def check_query_valid(query: ModuleType) -> None:
             raise AttributeError
 
 
-def run_query(query: dict, url: str) -> tuple[Union[httpx.Response, None], bool]:
+def run_query(query: dict, url: str) -> tuple[httpx.Response | None, bool]:
     """Run an individual query, handling sync or async intelligently."""
-    response: Optional[httpx.Response] = None
+    response: httpx.Response | None = None
     elapsed = 0.0
     uncertainty = 0
     passed = True
@@ -62,9 +62,9 @@ def run_query(query: dict, url: str) -> tuple[Union[httpx.Response, None], bool]
             response = CLIENT.request(
                 method=cast(str, query.get("method")),
                 url=url + cast(str, query.get("endpoint")),
-                params=query.get("params", None),
-                headers=query.get("headers", None),
-                json=query.get("body", None),
+                params=query.get("params"),
+                headers=query.get("headers"),
+                json=query.get("body"),
             )
 
         elapsed = response.elapsed.total_seconds()
@@ -155,7 +155,7 @@ def run_tests(query: dict, response: httpx.Response, passed: bool) -> bool:
 
         except Exception as error:
             console.print(
-                f"[red]![/] {i + 1}. {test.__name__}: An error occurred in this test: {repr(error)}"
+                f"[red]![/] {i + 1}. {test.__name__}: An error occurred in this test: {error!r}"
             )
             with redirect_stdout(stderr):
                 if inquirer.confirm(
@@ -170,17 +170,17 @@ def run_tests(query: dict, response: httpx.Response, passed: bool) -> bool:
 def manage_query(
     query_module: ModuleType,
     url: str,
-    view_mode: Literal["prompt", "skip", "every", "pipe"],
-    save_mode: Literal["prompt", "skip", "every"],
-    save_path: Optional[Path],
+    output_modes: OutputModes,
+    save_path: Path | None,
     on_fail: bool,
 ) -> None:
     """Interpret query as single or multiple and manage steps in running it."""
+    view_mode, save_mode = output_modes
     console.rule(
         Text("┌ ", style="rule.line")
         + str(
             Path(cast(str, query_module.__file__)).relative_to(
-                Path(trapi_testing_tools.__path__[0]) / "queries"
+                Path(trapi_testing_tools.__path__[0]).parent
             )
         ),
         align="left",
@@ -204,7 +204,7 @@ def manage_query(
             )
         ]
 
-    response: Optional[httpx.Response] = httpx.Response(200)
+    response: httpx.Response | None = httpx.Response(200)
     passed: bool = True
     for query in queries:
         response, passed = run_query(query, url)
@@ -239,12 +239,12 @@ def manage_query(
 def run_queries(
     files: list[Path],
     url: str,
-    view_mode: Literal["prompt", "skip", "every", "pipe"],
-    save_mode: Literal["prompt", "skip", "every"],
-    save_path: Optional[Path] = None,
+    output_modes: OutputModes,
+    save_path: Path | None = None,
     on_fail: bool = False,
 ) -> None:
     """Given a set of queries, run each."""
+    view_mode, save_mode = output_modes
     for file in files:
         file = file.resolve().relative_to(Path(trapi_testing_tools.__path__[0]).parent)
         if file.suffix != ".py":
@@ -257,10 +257,11 @@ def run_queries(
             console.print(f"ERROR: {file} does not exist. Skipping...", style="red")
             continue
         try:
-            query = importlib.import_module(".".join(file.with_suffix("").parts))
+            import_path = ".".join(file.with_suffix("").parts)
+            query = importlib.import_module(import_path)
         except Exception as error:
             console.print(
-                f"ERROR: failed to read query file due to {repr(error)}. The query will be skipped."
+                f"ERROR: failed to read query file due to {error!r}. The query will be skipped."
             )
             with redirect_stdout(stderr):
                 if inquirer.confirm(
@@ -268,4 +269,4 @@ def run_queries(
                 ).execute():
                     console.print_exception(show_locals=True)
             continue
-        manage_query(query, url, view_mode, save_mode, save_path, on_fail)
+        manage_query(query, url, output_modes, save_path, on_fail)

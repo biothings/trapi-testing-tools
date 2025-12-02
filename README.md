@@ -65,7 +65,7 @@ You can add your own queries to be used in `tt test`, the specification is relat
 
 ```python
 # Some tests are provided for validating the response
-from trapi_testing_tools.tests import http
+from tests import http
 
 method = "POST"  # Use any HTTP method here
 endpoint = "/v1/query"  # The endpoint to be applied to the tool

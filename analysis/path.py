@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 import json
-from typing import Annotated, Optional, cast
-import typer
-import questionary
-from pathlib import Path
 import sys
 from contextlib import redirect_stdout
+from pathlib import Path
+from typing import Annotated, cast
+
+import questionary
+import typer
 
 
 def eprint(*args, **kwargs):
@@ -16,12 +17,12 @@ app = typer.Typer(no_args_is_help=True)
 
 
 def read_trapi(path: Path) -> dict:
-    with open(path, "r") as file:
+    with open(path) as file:
         return json.load(file)
 
 
 def setup(
-    file: Path, start: Optional[str], end: Optional[str]
+    file: Path, start: str | None, end: str | None
 ) -> tuple[dict, dict, str, str]:
     response = read_trapi(file)
     kg = response["message"]["knowledge_graph"]
@@ -30,9 +31,9 @@ def setup(
 
     with redirect_stdout(sys.stderr):
         if start is None:
-            start = questionary.select(f"Select a starting QNode", choices=qnodes).ask()
+            start = questionary.select("Select a starting QNode", choices=qnodes).ask()
         if end is None:
-            end = questionary.select(f"Select an ending QNode", choices=qnodes).ask()
+            end = questionary.select("Select an ending QNode", choices=qnodes).ask()
 
     start = response["message"]["query_graph"]["nodes"][start]["ids"][0]
     end = response["message"]["query_graph"]["nodes"][end]["ids"][0]
@@ -92,8 +93,8 @@ def count(
             readable=True,
         ),
     ],
-    start: Annotated[Optional[str], typer.Option("--start", "-s")] = None,
-    end: Annotated[Optional[str], typer.Option("--end", "-e")] = None,
+    start: Annotated[str | None, typer.Option("--start", "-s")] = None,
+    end: Annotated[str | None, typer.Option("--end", "-e")] = None,
 ):
     response, kg, start, end = setup(file, start, end)
     paths = get_paths(kg, start, end)
@@ -120,8 +121,8 @@ def list(
             readable=True,
         ),
     ],
-    start: Annotated[Optional[str], typer.Option("--start", "-s")] = None,
-    end: Annotated[Optional[str], typer.Option("--end", "-e")] = None,
+    start: Annotated[str | None, typer.Option("--start", "-s")] = None,
+    end: Annotated[str | None, typer.Option("--end", "-e")] = None,
 ):
     response, kg, start, end = setup(file, start, end)
     paths = get_paths(kg, start, end)

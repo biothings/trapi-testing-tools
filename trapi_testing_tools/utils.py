@@ -6,7 +6,7 @@ import zipfile
 from contextlib import redirect_stdout
 from pathlib import Path
 from sys import stderr
-from typing import Literal, Optional
+from typing import Literal
 
 import httpx
 import yaml
@@ -22,23 +22,21 @@ SYNC_BASIC_CLIENT = httpx.Client(follow_redirects=True, timeout=None)
 ASYNC_BASIC_CLIENT = httpx.AsyncClient(follow_redirects=True, timeout=None)
 console = Console(stderr=True)
 
-with open(
-    Path(__file__).parent.joinpath("../config.yaml").resolve(), "r"
-) as config_file:
+with open(Path(__file__).parent.joinpath("../config.yaml").resolve()) as config_file:
     config = yaml.safe_load(config_file)
 
-EnvironmentMapping = {}
+ENVIRONMENT_MAPPING = dict[str, str]()
 default = None
 for env, levels in config["environments"].items():
     if env == "default":
         default = levels
         continue
     for level, url in levels.items():
-        EnvironmentMapping[f"{env}.{level}"] = url
+        ENVIRONMENT_MAPPING[f"{env}.{level}"] = url
 
 if default:
     for level, url in config["environments"][default].items():
-        EnvironmentMapping[level] = url
+        ENVIRONMENT_MAPPING[level] = url
 
 
 class IndentedBlock(RenderHook):
@@ -71,7 +69,7 @@ def handle_output(
     output: object,
     view_mode: Literal["prompt", "skip", "every", "pipe"],
     save_mode: Literal["prompt", "skip", "every"],
-    save_path: Optional[Path],
+    save_path: Path | None,
 ):
     if output is None:
         return
@@ -81,9 +79,13 @@ def handle_output(
 
     if should_output(output, "view", view_mode):
         if isinstance(output, dict):
-            subprocess.run("fx", input=json.dumps(output), shell=True, text=True)
+            subprocess.run(
+                "fx", input=json.dumps(output), shell=True, text=True, check=False
+            )
         else:
-            subprocess.run("less", input=str(output), shell=True, text=True)
+            subprocess.run(
+                "less", input=str(output), shell=True, text=True, check=False
+            )
 
     if should_output(
         output,
@@ -127,7 +129,7 @@ def cache_tests():
             remote_update = body["updated_at"]
             local_update = ""
             if local_update_file.exists():
-                with open(local_update_file, "r", encoding="utf8") as file:
+                with open(local_update_file, encoding="utf8") as file:
                     local_update = file.read()
                 needs_update = local_update != remote_update
 
@@ -145,10 +147,13 @@ def cache_tests():
                 )
 
             status.update("Getting repository contents...")
-            with open(archive_path, "wb") as archive_file, SYNC_BASIC_CLIENT.stream(
-                "GET",
-                f"{repo_url}/zipball",
-            ) as response:
+            with (
+                open(archive_path, "wb") as archive_file,
+                SYNC_BASIC_CLIENT.stream(
+                    "GET",
+                    f"{repo_url}/zipball",
+                ) as response,
+            ):
                 for chunk in response.iter_bytes():
                     archive_file.write(chunk)
                     status.update(
@@ -181,7 +186,7 @@ def cache_tests():
         )
     except Exception as error:
         console.print(
-            f"[red]ERROR:[/]: An error occurred while checking/updating cache: {repr(error)}"
+            f"[red]ERROR:[/]: An error occurred while checking/updating cache: {error!r}"
         )
         with redirect_stdout(stderr):
             if inquirer.confirm(
@@ -201,7 +206,7 @@ def select_tests(test_type: Literal["asset", "case", "suite"]) -> list[Path]:
     file_prompts = []
     prompt_to_fpath = {}
     for test_path in test_files:
-        with open(test_path, "r") as file:
+        with open(test_path) as file:
             test = json.load(file)
             desc = test["description"] if test_type == "suite" else test["name"]
             if desc is None:
@@ -226,7 +231,7 @@ async def check_api(instance_name, instance_url, max_name_len, progress):
     task = progress.add_task(f" {instance_name:>{max_name_len}} querying...", total=1)
     try:
         response = await ASYNC_BASIC_CLIENT.get(f"{instance_url}/query", timeout=10)
-        if not response.status_code == 405:
+        if response.status_code != 405:
             response.raise_for_status()
         time = round(response.elapsed.total_seconds() * 1000)
         progress.update(
@@ -247,7 +252,7 @@ async def check_api(instance_name, instance_url, max_name_len, progress):
     except httpx.RequestError as error:
         progress.update(
             task,
-            description=f"[red]x  {instance_name:>{max_name_len}}[/] {repr(error)}",
+            description=f"[red]x  {instance_name:>{max_name_len}}[/] {error!r}",
             completed=1,
         )
         progress.stop()

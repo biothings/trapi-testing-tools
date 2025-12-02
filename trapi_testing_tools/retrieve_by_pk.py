@@ -1,7 +1,7 @@
 from contextlib import redirect_stdout
 from pathlib import Path
 from sys import stderr
-from typing import Literal, Optional, cast
+from typing import Literal, cast
 
 import httpx
 from InquirerPy import inquirer
@@ -16,7 +16,6 @@ client = httpx.Client(follow_redirects=True, timeout=300)
 
 def get_ars_trace(pk: str) -> tuple[str, dict]:
     """Query the ARS instances until the pk is found, returning the trace."""
-
     levels = dict(
         prod="https://ars-prod.transltr.io/ars/api/messages",
         test="https://ars.test.transltr.io/ars/api/messages",
@@ -45,9 +44,8 @@ def get_ars_trace(pk: str) -> tuple[str, dict]:
     return target_url, response.json()
 
 
-def get_ars_ara_response(target_ars: str, trace: dict, ara: Optional[str]) -> dict:
+def get_ars_ara_response(target_ars: str, trace: dict, ara: str | None) -> dict:
     """Select an ARA-specific response from the ARS trace and retrieve it."""
-
     actor: dict
     actors = [
         child["actor"]["agent"].removeprefix("ara-")
@@ -83,7 +81,7 @@ def get_ars_ara_response(target_ars: str, trace: dict, ara: Optional[str]) -> di
     return response.json()
 
 
-def check_logs(body: dict) -> Optional[dict]:
+def check_logs(body: dict) -> dict | None:
     """Check logs for original response URL, prompt user to select, then retrieve response."""
     logs = body.get("fields", {}).get("data", {}).get("logs", {})
     if not logs:
@@ -118,8 +116,7 @@ def check_logs(body: dict) -> Optional[dict]:
 
 def handle_error(msg, error):
     """Print some `msg` and error name, prompting to print traceback."""
-
-    console.print(f"ERROR: {msg} due to {repr(error)}")
+    console.print(f"ERROR: {msg} due to {error!r}")
     with redirect_stdout(stderr):
         if inquirer.confirm("Print traceback for this error?", default=False).execute():
             console.print_exception(show_locals=True)
@@ -127,13 +124,12 @@ def handle_error(msg, error):
 
 def get_response_from_pk(
     pk: str,
-    ara: Optional[str],
+    ara: str | None,
     view_mode: Literal["prompt", "skip", "every", "pipe"],
     save_mode: Literal["prompt", "skip", "every"],
-    save_path: Optional[Path],
+    save_path: Path | None,
 ):
     """Drill down into ARS PK to get a response of interest."""
-
     target_url: str
     body: dict
     try:
