@@ -5,7 +5,6 @@ environments:
   default: bte
   bte:
     local: http://localhost:3000/v1
-    dev: https://api.bte.ncats.io/v1
     ci: https://bte.ci.transltr.io/v1
     test: https://bte.test.transltr.io/v1
     prod: https://bte.transltr.io/v1
@@ -16,4 +15,11 @@ environments:
     test: https://aragorn.test.transltr.io/aragorn
     prod: https://aragorn.transltr.io/aragorn
   retriever:
-    local: http://localhost:3000
+    local: http://localhost:8080
+    dev: https://retriever.bte.ncats.io
+    dev.alt: https://dev.retriever.biothings.io
+  shepherd:
+    aragorn.dev: https://shepherd.renci.org/aragorn
+    arax.dev: https://shepherd.renci.org/arax
+    bte.dev: https://shepherd.renci.org/bte
+    sipr.dev: https://shepherd.renci.org/sipr
