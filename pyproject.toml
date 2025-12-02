@@ -2,12 +2,14 @@
 name = "trapi-testing-tools"
 version = "0.1.0"
 description = "A collection of tools for testing and analyzing all things TRAPI."
-authors = [{ name = "tokebe", email = "43009413+tokebe@users.noreply.github.com" }]
-requires-python = "~=3.11"
+authors = [
+    { name = "tokebe", email = "43009413+tokebe@users.noreply.github.com" },
+]
+requires-python = ">=3.11"
 readme = "README.md"
 license = "MIT"
 dependencies = [
-    "typer[all]>=0.12.5,<0.13",
+    "typer>=0.20.0",
     "httpx>=0.27.2,<0.28",
     "pydantic>=2.9.2,<3",
     "tqdm>=4.66.5,<5",
@@ -21,10 +23,49 @@ dependencies = [
     "orjson>=3.11.3",
 ]
 
+[dependency-groups]
+dev = [
+    "ruff>=0.8.2,<0.9",
+    "yamllint>=1.35.1,<2",
+    "yamlfix>=1.17.0,<2",
+    "taskipy>=1.14.1",
+    "deptry>=0.23.0",
+    "bpython>=0.25",
+]
+
 [project.scripts]
 trapi-tools = "trapi_testing_tools.main:main"
 tt = "trapi_testing_tools.main:main"
 ttt = "trapi_testing_tools.main:test_shortcut"
+
+
+[tool.taskipy.tasks]
+# Code work
+lint = 'ruff check .'
+'lint:stats' = 'task lint --statistics'
+'lint:watch' = 'task lint --watch'
+'lint:fix' = 'task lint --fix'
+
+typecheck = 'basedpyright .'
+'typecheck:watch' = 'task typecheck --watch'
+
+format = 'ruff format --diff .'
+'format:fix' = 'ruff format .'
+
+fixup = """
+echo 'Linting...' &&
+task lint:fix &&
+echo 'Formatting...' &&
+task format:fix &&
+echo 'Static analysis...' &&
+task typecheck &&
+echo 'Check dependencies...' &&
+deptry . &&
+echo "✅ All set!"
+"""
+# Config work
+yamllint = 'yamllint .'
+yamlfix = 'yamlfix --exclude ".venv/**/*" .'
 
 [tool.hatch.build.targets.sdist]
 include = ["trapi_testing_tools"]
@@ -35,3 +76,70 @@ include = ["trapi_testing_tools"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 88
+indent-width = 4
+
+
+[tool.ruff.lint]
+select = [
+    # All of these were carefully chosen, see https://docs.astral.sh/ruff/rules
+    # Pyflakes
+    'F',
+    # Pycodestyle errors, warning
+    'E4',
+    'E7',
+    'E9',
+    'W',
+    # isort (sort imports)
+    'I',
+    # Pydocstyle (document your code!)
+    'D',
+    # Pep8 naming conventions (but slightly less pedantic)
+    'N80',
+    # Pyupgrade (use newer conventions)
+    'UP',
+    # Flake8-bugbear
+    'B',
+    # Flake8-annotations (require type annotations)
+    'ANN0',
+    'ANN2',
+    # Flake8-builtins (don't overwrite builtins)
+    'A',
+    # Flake8-comprehensions
+    'C4',
+    # Flake8-logging-format
+    'G',
+    # Flake8-simplify
+    'SIM',
+    # Flake8-use-pathlib (pathlib is just better)
+    'PTH',
+    # Pylint
+    'PL',
+    # FastAPI
+    'FAST',
+    # Perflint
+    'PERF',
+    # Refurb
+    'FURB',
+    # Ruff-specific
+    'RUF',
+]
+ignore = ['D100', 'D206', 'D300']
+
+[tool.ruff.lint.pydocstyle]
+convention = 'google'
+
+[tool.ruff.lint.flake8-comprehensions]
+allow-dict-calls-with-keyword-arguments = true
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.pyright]
+# Make any allowable. Builtins sometimes deal in Any and aren't worth the extra modeling
+reportAny = false
+reportExplicitAny = false
+reportUnusedCallResult = false # Just makes code look worse; Usually unused results are deliberately ignored
+reportMissingTypeStubs = false # Sometimes type stubs aren't available and auto-gen is incorrect
