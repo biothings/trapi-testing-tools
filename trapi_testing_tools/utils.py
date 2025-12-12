@@ -2,6 +2,7 @@ import asyncio
 import json
 import shutil
 import subprocess
+from types import ModuleType
 import zipfile
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -105,6 +106,26 @@ def handle_output(
                 json.dump(output, file)
             else:
                 file.write(str(output))
+
+
+def check_query_valid(query: ModuleType) -> None:
+    """Check that query has required options."""
+    methods = ["GET", "POST"]
+    if not hasattr(query, "steps"):
+        if not hasattr(query, "method") or query.method not in ["GET", "POST"]:
+            console.print("query must have method defined as GET or POST")
+            raise AttributeError
+        if not hasattr(query, "endpoint"):
+            console.print("query must have endpoint defined")
+            raise AttributeError
+        return
+    for step in query.steps:
+        if step.get("method", None) not in methods:
+            console.print("query must have method defined as GET or POST")
+            raise AttributeError
+        if step.get("endpoint", None) is None:
+            console.print("query must have endpoint defined")
+            raise AttributeError
 
 
 def cache_tests():

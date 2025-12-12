@@ -5,7 +5,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from sys import stderr
 from types import ModuleType
-from typing import Literal, cast
+from typing import cast
 
 import httpx
 import yaml
@@ -17,8 +17,8 @@ from rich.pretty import Pretty
 from rich.text import Text
 
 import trapi_testing_tools
-from trapi_testing_tools.types import OutputModes, SaveMode, ViewMode
-from trapi_testing_tools.utils import IndentedBlock, handle_output
+from trapi_testing_tools.types import OutputModes
+from trapi_testing_tools.utils import IndentedBlock, check_query_valid, handle_output
 
 console = Console(stderr=True)
 
@@ -28,24 +28,6 @@ with open(Path(__file__).parent.joinpath("../config.yaml").resolve()) as config_
 CLIENT = httpx.Client(follow_redirects=True, timeout=config["timeout"])
 
 
-def check_query_valid(query: ModuleType) -> None:
-    """Check that query has required options."""
-    methods = ["GET", "POST"]
-    if not hasattr(query, "steps"):
-        if not hasattr(query, "method") or query.method not in ["GET", "POST"]:
-            console.print("query must have method defined as GET or POST")
-            raise AttributeError
-        if not hasattr(query, "endpoint"):
-            console.print("query must have endpoint defined")
-            raise AttributeError
-        return
-    for step in query.steps:
-        if step.get("method", None) not in methods:
-            console.print("query must have method defined as GET or POST")
-            raise AttributeError
-        if step.get("endpoint", None) is None:
-            console.print("query must have endpoint defined")
-            raise AttributeError
 
 
 def run_query(query: dict, url: str) -> tuple[httpx.Response | None, bool]:

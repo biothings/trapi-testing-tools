@@ -10,6 +10,7 @@ from rich.console import Console
 from typer.core import TyperGroup
 
 from trapi_testing_tools.commands.analyze import app as analyze_app
+from trapi_testing_tools.commands.curl import app as curl_app
 from trapi_testing_tools.commands.harness import app as harness_app
 from trapi_testing_tools.commands.ping import app as ping_app
 from trapi_testing_tools.commands.pk import app as pk_app
@@ -51,6 +52,7 @@ app.add_typer(validate_app)
 app.add_typer(ping_app)
 app.add_typer(harness_app)
 app.add_typer(pk_app)
+app.add_typer(curl_app)
 # TODO: make a command that curl-izes a given query
 
 
@@ -63,6 +65,7 @@ def test_shortcut() -> None:
     """Very hacky shortcut to directly use the `test` command from a project script."""
     sys.argv.insert(1, "test")
     app()
+
 
 
 if __name__ == "__main__":
