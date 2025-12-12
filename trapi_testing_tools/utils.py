@@ -2,11 +2,11 @@ import asyncio
 import json
 import shutil
 import subprocess
-from types import ModuleType
 import zipfile
 from contextlib import redirect_stdout
 from pathlib import Path
 from sys import stderr
+from types import ModuleType
 from typing import Literal
 
 import httpx

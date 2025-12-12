@@ -53,7 +53,6 @@ app.add_typer(ping_app)
 app.add_typer(harness_app)
 app.add_typer(pk_app)
 app.add_typer(curl_app)
-# TODO: make a command that curl-izes a given query
 
 
 def main() -> None:
@@ -65,7 +64,6 @@ def test_shortcut() -> None:
     """Very hacky shortcut to directly use the `test` command from a project script."""
     sys.argv.insert(1, "test")
     app()
-
 
 
 if __name__ == "__main__":

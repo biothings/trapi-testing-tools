@@ -23,5 +23,5 @@ body = {
 }
 tests = [
     http.status(200),
-    logs.no_debug_logs,
+    logs.NoDebugLogs,
 ]

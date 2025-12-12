@@ -17,10 +17,10 @@ body = {
 }
 tests = [
     http.status(200),
-    kg.node_count,
-    kg.edge_count,
-    results.result_count,
-    logs.no_error_logs,
-    logs.cache_bypass_log,
-    logs.no_cache_hits,
+    kg.NodeCount,
+    kg.EdgeCount,
+    results.ResultCount,
+    logs.NoErrorLogs,
+    logs.CacheBypassLog,
+    logs.NoCacheHits,
 ]

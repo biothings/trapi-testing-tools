@@ -1,6 +1,9 @@
+from typing import override
+
 import httpx
 
 from tests import http
+from tests.base_test import Test, TestResult
 
 method = "POST"
 endpoint = "/team/lalala/query"
@@ -24,10 +27,15 @@ body = {
 }
 
 
-def query_not_traversable_status(response: httpx.Response) -> str | None:
-    body = response.json()
-    if body["status"] != "QueryNotTraversable":
-        return "Response status is not QueryNotTraversable."
+class QueryNotTraversableStatus(Test):
+    """response status is QueryNotTraversable."""
+
+    @override
+    @staticmethod
+    def test(response: httpx.Response) -> TestResult:
+        body = response.json()
+        passed = body["status"] == "QueryNotTraversable"
+        return TestResult(passed, body["status"] if not passed else None)
 
 
-tests = [http.status(400), query_not_traversable_status]
+tests = [http.status(400), QueryNotTraversableStatus]

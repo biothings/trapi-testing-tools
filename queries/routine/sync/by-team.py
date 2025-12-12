@@ -22,9 +22,9 @@ body = {
 }
 tests = [
     http.status(200),
-    kg.node_count,
-    kg.edge_count,
-    results.result_count,
-    logs.no_error_logs,
-    logs.log_one_api,
+    kg.NodeCount,
+    kg.EdgeCount,
+    results.ResultCount,
+    logs.NoErrorLogs,
+    logs.LogOneAPI,
 ]

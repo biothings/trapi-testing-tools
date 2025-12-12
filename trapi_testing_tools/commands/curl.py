@@ -42,7 +42,6 @@ def curl(
 
     query = query.resolve().relative_to(Path(trapi_testing_tools.__path__[0]).parent)
 
-
     query_module = check_file(query)
 
     queries: list[dict[str, Any]]

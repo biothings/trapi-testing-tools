@@ -1,5 +1,6 @@
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
+
 import typer
 
 from trapi_testing_tools.retrieve_by_pk import get_response_from_pk
@@ -18,13 +19,13 @@ def pk(
         str, typer.Argument(help="The Primary Key of a given ARS query run.")
     ],
     ara: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--ara", "-a", help="The ARA you wish to retrieve the response of."
         ),
     ] = None,
     view: Annotated[
-        Optional[bool],
+        bool | None,
         typer.Option(
             "--view/--no-view",
             "-v/-V",
@@ -33,7 +34,7 @@ def pk(
         ),
     ] = None,
     save: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option(
             "--save",
             "-s",

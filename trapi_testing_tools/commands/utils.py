@@ -8,7 +8,6 @@ from InquirerPy import inquirer
 from rich.console import Console
 
 import queries as query_list
-import trapi_testing_tools
 from trapi_testing_tools.types import OutputModes
 from trapi_testing_tools.utils import ENVIRONMENT_MAPPING
 

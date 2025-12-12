@@ -21,10 +21,10 @@ body = {
 }
 tests = [
     http.status(200),
-    kg.node_count,
-    kg.edge_count,
-    kg.source_record_urls,
-    results.result_count,
-    logs.no_error_logs,
+    kg.NodeCount,
+    kg.EdgeCount,
+    kg.SourceRecordURLs,
+    results.ResultCount,
+    logs.NoErrorLogs,
 ]
 # jsonpath "$.message.knowledge_graph.edges[*].sources[0].source_record_urls" isString

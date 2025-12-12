@@ -1,6 +1,9 @@
+from typing import override
+
 import httpx
 
 from tests import http
+from tests.base_test import Test, TestResult
 
 method = "POST"
 endpoint = "/asyncquery"
@@ -29,10 +32,15 @@ body = {
 }
 
 
-def not_implemented_error(response: httpx.Response) -> str | None:
-    body = response.json()
-    if body["description"] != "NotImplementedError":
-        return "Did not get NotImplementedError."
+class TRAPINotImplementedError(Test):
+    """response desc. is NotImplementedError."""
+
+    @override
+    @staticmethod
+    def test(response: httpx.Response) -> TestResult:
+        body = response.json()
+        passed = body["description"] == "NotImplementedError"
+        return TestResult(passed, body["description"] if not passed else None)
 
 
-tests = [http.status(200), not_implemented_error]
+tests = [http.status(200), TRAPINotImplementedError]

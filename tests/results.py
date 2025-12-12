@@ -1,15 +1,29 @@
+from typing import override
+
 import httpx
 
-
-def result_count(response: httpx.Response) -> str | None:
-    body = response.json()
-    no_results = len(body["message"]["results"]) == 0
-    if no_results:
-        return "0 results"
+from tests.base_test import Test, TestResult
 
 
-def no_results(response: httpx.Response) -> str | None:
-    body = response.json()
-    no_results = len(body["message"]["results"]) == 0
-    if not no_results:
-        return ">0 results"
+class ResultCount(Test):
+    """has results."""
+
+    @override
+    @staticmethod
+    def test(response: httpx.Response) -> TestResult:
+        body = response.json()
+        n_results = len(body["message"]["results"])
+
+        return TestResult(n_results > 0, f"{n_results} results")
+
+
+class NoResults(Test):
+    """has no results."""
+
+    @override
+    @staticmethod
+    def test(response: httpx.Response) -> TestResult:
+        body = response.json()
+        n_results = len(body["message"]["results"])
+
+        return TestResult(n_results == 0, f"{n_results} results")

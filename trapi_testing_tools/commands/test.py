@@ -50,7 +50,7 @@ def test(  # noqa: PLR0913
         typer.Option(
             "--debug",
             "-d",
-            help="Like --test, but stop to view/save failing queries.",
+            help="Stop to view/save failing queries.",
         ),
     ] = False,
     view: Annotated[

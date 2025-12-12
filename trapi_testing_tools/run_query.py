@@ -1,11 +1,10 @@
 import importlib
 import time
-from collections.abc import Callable
 from contextlib import redirect_stdout
 from pathlib import Path
 from sys import stderr
 from types import ModuleType
-from typing import cast
+from typing import Any, cast
 
 import httpx
 import yaml
@@ -17,6 +16,7 @@ from rich.pretty import Pretty
 from rich.text import Text
 
 import trapi_testing_tools
+from tests.base_test import Test
 from trapi_testing_tools.types import OutputModes
 from trapi_testing_tools.utils import IndentedBlock, check_query_valid, handle_output
 
@@ -26,8 +26,6 @@ with open(Path(__file__).parent.joinpath("../config.yaml").resolve()) as config_
     config = yaml.safe_load(config_file)
 
 CLIENT = httpx.Client(follow_redirects=True, timeout=config["timeout"])
-
-
 
 
 def run_query(query: dict, url: str) -> tuple[httpx.Response | None, bool]:
@@ -113,27 +111,46 @@ def run_query(query: dict, url: str) -> tuple[httpx.Response | None, bool]:
     return response, passed
 
 
-def run_tests(query: dict, response: httpx.Response, passed: bool) -> bool:
+def run_tests(query: dict[str, Any], response: httpx.Response) -> tuple[int, int]:
     """Run tests specified by query against the response."""
-    for i, test in enumerate(cast(list[Callable], query.get("tests"))):
+    passed = 0
+    failed = 0
+
+    for i, test in enumerate(cast(list[Test], query.get("tests", []))):
         try:
-            failure_report = test(response)  # Returns report if failed otherwise None
+            result = test.test(response)  # Returns report if failed otherwise None
 
-            if not failure_report:
-                console.print(f"[green]✓[/] {i + 1}. {test.__name__}")
-                continue
+            message = ""
 
-            console.print(f"[red]x[/] {i + 1}. {test.__name__}")
-            passed = False
-            report_visual = Panel(
-                Pretty(failure_report),
-                title="failure reason",
-                title_align="left",
-                expand=False,
-                box=box.SQUARE,
-                border_style="red",
+            if result.passed:
+                message += "[green]✓[/]"
+                passed += 1
+            else:
+                message += "[red]x[/]"
+                failed += 1
+
+            test_name = (
+                test.__doc__.removesuffix(".") if test.__doc__ else test.__name__
             )
-            console.print(report_visual)
+            message += f" {i + 1}. {test_name}"
+
+            report_long: Panel | None = None
+            if result.info:
+                if isinstance(result.info, str) and "\n" not in result.info:
+                    message += f" ({result.info})"
+                else:
+                    report_long = Panel(
+                        Pretty(result.info),
+                        title="details",
+                        title_align="left",
+                        expand=False,
+                        box=box.SQUARE,
+                        border_style="red",
+                    )
+
+            console.print(message)
+            if report_long:
+                console.print(report_long)
 
         except Exception as error:
             console.print(
@@ -144,9 +161,9 @@ def run_tests(query: dict, response: httpx.Response, passed: bool) -> bool:
                     "Print traceback for this error?", default=False
                 ).execute():
                     console.print_exception(show_locals=True)
-            passed = False
+            failed += 1
 
-    return passed
+    return passed, failed
 
 
 def manage_query(
@@ -188,6 +205,8 @@ def manage_query(
 
     response: httpx.Response | None = httpx.Response(200)
     passed: bool = True
+    n_passed: int | None = None
+    n_failed: int | None = None
     for query in queries:
         response, passed = run_query(query, url)
         if not response:
@@ -196,7 +215,8 @@ def manage_query(
             return
 
         if passed and query.get("tests", False):
-            passed = run_tests(query, response, passed)
+            n_passed, n_failed = run_tests(query, response)
+            passed = n_failed == 0
 
     # Output
     if on_fail and passed:
@@ -204,15 +224,23 @@ def manage_query(
         save_mode = "skip"
 
     try:
-        output = cast(dict, response.json())
+        output = cast(dict[str, Any], response.json())
     except Exception:
         output = response.text
 
     handle_output(output, view_mode, save_mode, save_path)
 
     console.pop_render_hook()
+
+    message = "[green]✓ Passed[/]" if passed else "[red]X Failed[/]"
+
+    if not passed and isinstance(n_passed, int):
+        message += f" {n_failed}"
+        if n_passed > 0:
+            message += f"[white] ─ [/][green]Passed[/] {n_passed}"
+
     console.print(
-        f"└ {'[green]✓ Tests Passed[/]' if passed else '[red]x Failed[/]'}",
+        f"└ {message}",
         style="rule.line",
         markup=True,
     )

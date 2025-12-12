@@ -21,4 +21,4 @@ body = {
         }
     },
 }
-tests = [http.status(200), results.no_results, logs.dryrun_log]
+tests = [http.status(200), results.NoResults, logs.DryRunLog]

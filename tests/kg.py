@@ -1,57 +1,83 @@
+from typing import override
+
 import httpx
 
-
-def node_count(response: httpx.Response) -> str | None:
-    body = response.json()
-    no_nodes = len(body["message"]["knowledge_graph"]["nodes"].keys()) == 0
-    if no_nodes:
-        return "0 nodes."
+from tests.base_test import Test, TestResult
 
 
-def edge_count(response: httpx.Response) -> str | None:
-    body = response.json()
-    no_edges = len(body["message"]["knowledge_graph"]["edges"].keys()) == 0
-    if no_edges:
-        return "0 edges"
+class NodeCount(Test):
+    """kg has nodes."""
+
+    @override
+    @staticmethod
+    def test(response: httpx.Response) -> TestResult:
+        body = response.json()
+        node_count = len(body["message"]["knowledge_graph"]["nodes"].keys())
+        return TestResult(node_count > 0, f"{node_count} nodes")
 
 
-def source_record_urls(response: httpx.Response) -> str | None:
-    body = response.json()
-    has_source_record_urls = next(
-        (
-            edge
-            for edge in body["message"]["knowledge_graph"]["edges"].values()
-            if len(
-                [
-                    source
-                    for source in edge["sources"]
-                    if source.get("source_record_urls", None) is not None
-                ]
-            )
-            > 0
-        ),
-        False,
-    )
-    if not has_source_record_urls:
-        return "No edge has source_record_urls"
+class EdgeCount(Test):
+    """kg has edges."""
+
+    @override
+    @staticmethod
+    def test(response: httpx.Response) -> TestResult:
+        body = response.json()
+        edge_count = len(body["message"]["knowledge_graph"]["edges"].keys())
+        return TestResult(edge_count > 0, f"{edge_count} edges")
 
 
-def kl_at(response: httpx.Response) -> str | None:
-    body = response.json()
-    has_kl_at = next(
-        (
-            edge
-            for edge in body["message"]["knowledge_graph"]["edges"].values()
-            if len(
-                [
-                    attr
-                    for attr in edge["attributes"]
-                    if attr["attribute_type_id"]
-                    in ["biolink:knowledge_level", "biolink:agent_type"]
-                ]
-            )
-        ),
-        False,
-    )
-    if not has_kl_at:
-        return "No edge has knowledge level or agent type"
+class SourceRecordURLs(Test):
+    """has source_record_urls."""
+
+    @override
+    @staticmethod
+    def test(response: httpx.Response) -> TestResult:
+        body = response.json()
+
+        has_source_record_urls = next(
+            (
+                edge
+                for edge in body["message"]["knowledge_graph"]["edges"].values()
+                if len(
+                    [
+                        source
+                        for source in edge["sources"]
+                        if source.get("source_record_urls", None) is not None
+                    ]
+                )
+                > 0
+            ),
+            False,
+        )
+        return TestResult(
+            has_source_record_urls > 0,
+            "No edge has source_record_urls" if not has_source_record_urls else None,
+        )
+
+
+class HasKLAT(Test):
+    """all edges have kl/at."""
+
+    @override
+    @staticmethod
+    def test(response: httpx.Response) -> TestResult:
+        body = response.json()
+
+        missing = list[str]()
+        for edge_id, edge in body["message"]["knowledge_graph"]["edges"].items():
+            if (
+                not len(
+                    [
+                        attr
+                        for attr in edge["attributes"]
+                        if attr["attribute_type_id"]
+                        in ["biolink:knowledge_level", "biolink:agent_type"]
+                    ]
+                )
+                >= 2  # noqa: PLR2004
+            ):
+                missing.append(edge_id)
+        return TestResult(
+            len(missing) == 0, missing if len(missing) == 0 else None
+        )

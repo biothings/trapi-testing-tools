@@ -26,10 +26,10 @@ steps = [
         body=query_body,
         tests=[
             http.status(200),
-            kg.node_count,
-            kg.edge_count,
-            results.result_count,
-            logs.no_error_logs,
+            kg.NodeCount,
+            kg.EdgeCount,
+            results.ResultCount,
+            logs.NoErrorLogs,
         ],
     ),
     dict(
@@ -38,11 +38,11 @@ steps = [
         body=query_body,
         tests=[
             http.status(200),
-            kg.node_count,
-            kg.edge_count,
-            results.result_count,
-            logs.no_error_logs,
-            logs.found_cache_log,
+            kg.NodeCount,
+            kg.EdgeCount,
+            results.ResultCount,
+            logs.NoErrorLogs,
+            logs.FoundCacheLog,
         ],
     ),
 ]

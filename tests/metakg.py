@@ -1,10 +1,25 @@
-def node_count(response):
-    no_nodes = len(response.json()["nodes"].keys()) == 0
-    if no_nodes:
-        return "0 nodes."
+from typing import override
+
+import httpx
+
+from tests.base_test import Test, TestResult
 
 
-def edge_count(response):
-    no_edges = len(response.json()["edges"]) == 0
-    if no_edges:
-        return "0 edges"
+class NodeCount(Test):
+    """metakg has nodes."""
+
+    @override
+    @staticmethod
+    def test(response: httpx.Response) -> TestResult:
+        node_count = len(response.json()["nodes"].keys())
+        return TestResult(node_count > 0, f"{node_count} nodes")
+
+
+class EdgeCount(Test):
+    """metakg has edges."""
+
+    @override
+    @staticmethod
+    def test(response: httpx.Response) -> TestResult:
+        edge_count = len(response.json()["edges"])
+        return TestResult(edge_count > 0, f"{edge_count} edges")
