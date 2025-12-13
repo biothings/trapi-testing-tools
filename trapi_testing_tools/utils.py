@@ -7,7 +7,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from sys import stderr
 from types import ModuleType
-from typing import Literal
+from typing import Any, Literal, cast, get_args
 
 import httpx
 import yaml
@@ -18,6 +18,9 @@ from rich import progress
 from rich.console import Console, Group, RenderHook
 from rich.live import Live
 from rich.text import Text
+
+from tests.base_test import Test
+from trapi_testing_tools.types import HTTPMethod, Query
 
 SYNC_BASIC_CLIENT = httpx.Client(follow_redirects=True, timeout=None)
 ASYNC_BASIC_CLIENT = httpx.AsyncClient(follow_redirects=True, timeout=None)
@@ -108,24 +111,61 @@ def handle_output(
                 file.write(str(output))
 
 
-def check_query_valid(query: ModuleType) -> None:
+def parse_query(query_module: ModuleType) -> list[Query]:
     """Check that query has required options."""
-    methods = ["GET", "POST"]
-    if not hasattr(query, "steps"):
-        if not hasattr(query, "method") or query.method not in ["GET", "POST"]:
-            console.print("query must have method defined as GET or POST")
-            raise AttributeError
-        if not hasattr(query, "endpoint"):
-            console.print("query must have endpoint defined")
-            raise AttributeError
-        return
-    for step in query.steps:
-        if step.get("method", None) not in methods:
-            console.print("query must have method defined as GET or POST")
-            raise AttributeError
-        if step.get("endpoint", None) is None:
-            console.print("query must have endpoint defined")
-            raise AttributeError
+    queries: list[Query]
+
+    if hasattr(query_module, "steps"):
+        queries = query_module.steps
+    else:
+        method = getattr(query_module, "method", "GET")
+        if not isinstance(method, str) or method not in get_args(HTTPMethod):
+            raise AttributeError("Query method must be a valid HTTP Method.")
+
+        endpoint = getattr(query_module, "endpoint", None)
+        if endpoint is None:
+            raise AttributeError("Query must define an endpoint.")
+
+        params = getattr(query_module, "params", {})
+        if not isinstance(params, dict) or any(
+            not isinstance(key, str)
+            for key in params.values()  # pyright:ignore[reportUnknownVariableType]
+        ):
+            raise AttributeError(
+                "Query headers must a dict of header-value string pairs."
+            )
+        headers = getattr(query_module, "headers", {})
+        if not isinstance(headers, dict) or any(
+            not isinstance(key, str) or not isinstance(value, str)
+            for key, value in headers.items()  # pyright:ignore[reportUnknownVariableType]
+        ):
+            raise AttributeError(
+                "Query headers must a dict of header-value string pairs."
+            )
+
+        body = getattr(query_module, "body", None)
+        if not isinstance(body, dict | list | None):
+            raise AttributeError("Query body must be serializable to JSON.")
+
+        tests = getattr(query_module, "tests", None)
+        if not isinstance(tests, list | None) or (
+            isinstance(tests, list)
+            and any(not issubclass(test, Test) for test in tests)  # pyright:ignore[reportUnknownVariableType]
+        ):
+            raise AttributeError("Query tests must be defined using Test class.")
+
+        queries = [
+            Query(
+                method=cast(HTTPMethod, method),
+                endpoint=endpoint,
+                params=cast(dict[str, Any], params),
+                headers=cast(dict[str, str], headers),
+                body=cast(dict[str, Any] | list[Any] | None, body),
+                tests=cast(list[type[Test]], tests),
+            )
+        ]
+
+    return queries
 
 
 def cache_tests():

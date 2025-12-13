@@ -1,4 +1,5 @@
 from tests import http, kg, logs, results
+from trapi_testing_tools.types import Query
 
 # Using nephrotic syndrome as an example
 query_body = {
@@ -20,7 +21,7 @@ query_body = {
     }
 }
 steps = [
-    dict(
+    Query(
         method="POST",
         endpoint="/query",
         body=query_body,
@@ -32,7 +33,7 @@ steps = [
             logs.NoErrorLogs,
         ],
     ),
-    dict(
+    Query(
         method="POST",
         endpoint="/query",
         body=query_body,

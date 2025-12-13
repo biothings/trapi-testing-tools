@@ -78,6 +78,4 @@ class HasKLAT(Test):
                 >= 2  # noqa: PLR2004
             ):
                 missing.append(edge_id)
-        return TestResult(
-            len(missing) == 0, missing if len(missing) == 0 else None
-        )
+        return TestResult(len(missing) == 0, missing if len(missing) == 0 else None)

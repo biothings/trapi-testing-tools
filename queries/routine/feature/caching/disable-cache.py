@@ -1,4 +1,5 @@
 from tests import http, kg, logs, results
+from trapi_testing_tools.types import Query
 
 query_body = {
     "submitter": "bte-dev-tester-manual",
@@ -13,7 +14,7 @@ query_body = {
     },
 }
 steps = [
-    dict(
+    Query(
         method="POST",
         endpoint="/query",
         params=dict(caching=False),
@@ -26,7 +27,7 @@ steps = [
             logs.NoErrorLogs,
         ],
     ),
-    dict(
+    Query(
         method="POST",
         endpoint="/query",
         params=dict(caching=False),
