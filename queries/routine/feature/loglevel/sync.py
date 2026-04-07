@@ -4,7 +4,7 @@ method = "POST"
 endpoint = "/query"
 body = {
     "log_level": "INFO",
-    "submitter": "bte-dev-tester-manual",
+    "submitter": "trapi-testing-tools",
     "message": {
         "query_graph": {
             "nodes": {

@@ -3,7 +3,7 @@ from tests import http, kg, logs, results
 method = "POST"
 endpoint = "/query"
 body = {
-    "submitter": "bte-dev-tester-manual",
+    "submitter": "trapi-testing-tools",
     "bypass_cache": True,
     "message": {
         "query_graph": {

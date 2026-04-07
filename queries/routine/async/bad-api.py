@@ -3,7 +3,7 @@ from tests import http, logs
 method = "POST"
 endpoint = "/smartapi/lalala/asyncquery"
 body = {
-    "submitter": "bte-dev-tester-manual",
+    "submitter": "trapi-testing-tools",
     "message": {
         "query_graph": {
             "nodes": {

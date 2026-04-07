@@ -3,7 +3,7 @@ from tests import http, kg, logs, results
 method = "POST"
 endpoint = "/smartapi/d22b657426375a5295e7da8a303b9893/asyncquery"
 body = {
-    "submitter": "bte-dev-tester-manual",
+    "submitter": "trapi-testing-tools",
     "message": {
         "query_graph": {
             "nodes": {

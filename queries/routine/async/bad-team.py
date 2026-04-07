@@ -3,7 +3,7 @@ from tests import http
 method = "POST"
 endpoint = "/team/lalala/asyncquery"
 body = {
-    "submitter": "bte-dev-tester-manual",
+    "submitter": "trapi-testing-tools",
     "message": {
         "query_graph": {
             "nodes": {

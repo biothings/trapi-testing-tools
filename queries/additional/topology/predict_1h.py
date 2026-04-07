@@ -5,7 +5,7 @@ endpoint = "/query"
 body = {
     "parameters": {"tiers": [1], "timeout": -1},
     "bypass_cache": True,
-    "submitter": "bte-dev-tester-manual",
+    "submitter": "trapi-testing-tools",
     "message": {
         "query_graph": {
             "nodes": {
