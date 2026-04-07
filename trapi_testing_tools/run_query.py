@@ -7,7 +7,6 @@ from types import ModuleType
 from typing import Any, cast
 
 import httpx
-import yaml
 from InquirerPy import inquirer
 from rich import box
 from rich.console import Console
@@ -16,15 +15,14 @@ from rich.pretty import Pretty
 from rich.text import Text
 
 import trapi_testing_tools
+from trapi_testing_tools.config import CONFIG
 from trapi_testing_tools.types import OutputModes, Query
 from trapi_testing_tools.utils import IndentedBlock, handle_output, parse_query
 
 console = Console(stderr=True)
 
-with open(Path(__file__).parent.joinpath("../config.yaml").resolve()) as config_file:
-    config = yaml.safe_load(config_file)
 
-CLIENT = httpx.Client(follow_redirects=True, timeout=config["timeout"])
+CLIENT = httpx.Client(follow_redirects=True, timeout=CONFIG.timeout)
 
 
 def run_queries(
@@ -161,7 +159,7 @@ def run_query(query: Query, url: str) -> tuple[httpx.Response | None, bool]:
 
         # Poll for response from async status endpoint
         with console.status("Polling status endpoint every 10s...") as task_status:
-            timeout = time.time() + config["timeout"]
+            timeout = time.time() + CONFIG.timeout
             timed_out = False
             attempt = 0
             console.print(f"GET {status_url} (polling)")

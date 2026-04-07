@@ -4,7 +4,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from sys import stderr
 from types import ModuleType
-from typing import Annotated, Any
+from typing import Annotated
 
 import typer
 from InquirerPy import inquirer
@@ -12,7 +12,7 @@ from rich.console import Console
 
 import trapi_testing_tools
 from trapi_testing_tools.commands.utils import set_environment, set_queries
-from trapi_testing_tools.utils import ENVIRONMENT_MAPPING
+from trapi_testing_tools.utils import ENVIRONMENT_MAPPING, parse_query
 
 console = Console(stderr=True)
 app = typer.Typer(
@@ -44,20 +44,7 @@ def curl(
 
     query_module = check_file(query)
 
-    queries: list[dict[str, Any]]
-    if hasattr(query_module, "steps"):
-        queries = query_module.steps
-    else:
-        queries = [
-            dict(
-                method=getattr(query_module, "method", None),
-                headers=getattr(query_module, "headers", None),
-                endpoint=getattr(query_module, "endpoint", None),
-                params=getattr(query_module, "params", None),
-                body=getattr(query_module, "body", None),
-                tests=getattr(query_module, "tests", None),
-            )
-        ]
+    queries = parse_query(query_module)
 
     if (
         len(queries) > 1
@@ -69,11 +56,11 @@ def curl(
         queries = queries[0:1]
 
     for step in queries:
-        url = f"{ENVIRONMENT_MAPPING[environment]}{step.get('endpoint')}"
+        url = f"{ENVIRONMENT_MAPPING[environment]}{step.endpoint}"
         params = "&".join(
             [
                 f"{name}={value}"
-                for name, value in (step.get("params", {}) or {}).items()
+                for name, value in step.params.items()
             ]
         )
         if len(params) > 0:
@@ -81,17 +68,17 @@ def curl(
 
         headers = [
             f"{name}: {value}"
-            for name, value in (step.get("headers", {}) or {}).items()
+            for name, value in step.headers.items()
         ]
 
         command = [
-            f"curl -X {step.get('method')}",
+            f"curl -X {step.method}",
             url,
             "-H 'Content-Type: application/json'",
             *headers,
         ]
 
-        body = step.get("body")
+        body = step.body
         if body:
             command.append(f"--data '{json.dumps(body, indent=2)}'")
 

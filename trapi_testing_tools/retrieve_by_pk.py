@@ -1,7 +1,7 @@
 from contextlib import redirect_stdout
 from pathlib import Path
 from sys import stderr
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 import httpx
 from InquirerPy import inquirer
@@ -14,7 +14,7 @@ console = Console(stderr=True)
 client = httpx.Client(follow_redirects=True, timeout=300)
 
 
-def get_ars_trace(pk: str) -> tuple[str, dict]:
+def get_ars_trace(pk: str) -> tuple[str, dict[str, Any]]:
     """Query the ARS instances until the pk is found, returning the trace."""
     levels = dict(
         prod="https://ars-prod.transltr.io/ars/api/messages",
@@ -44,9 +44,11 @@ def get_ars_trace(pk: str) -> tuple[str, dict]:
     return target_url, response.json()
 
 
-def get_ars_ara_response(target_ars: str, trace: dict, ara: str | None) -> dict:
+def get_ars_ara_response(
+    target_ars: str, trace: dict[str, Any], ara: str | None
+) -> dict[str, Any]:
     """Select an ARA-specific response from the ARS trace and retrieve it."""
-    actor: dict
+    actor: dict[str, Any]
     actors = [
         child["actor"]["agent"].removeprefix("ara-")
         for child in trace["children"]
@@ -81,7 +83,7 @@ def get_ars_ara_response(target_ars: str, trace: dict, ara: str | None) -> dict:
     return response.json()
 
 
-def check_logs(body: dict) -> dict | None:
+def check_logs(body: dict[str, Any]) -> dict[str, Any] | None:
     """Check logs for original response URL, prompt user to select, then retrieve response."""
     logs = body.get("fields", {}).get("data", {}).get("logs", {})
     if not logs:
@@ -114,7 +116,7 @@ def check_logs(body: dict) -> dict | None:
     return response.json()
 
 
-def handle_error(msg, error):
+def handle_error(msg: str, error: Exception) -> None:
     """Print some `msg` and error name, prompting to print traceback."""
     console.print(f"ERROR: {msg} due to {error!r}")
     with redirect_stdout(stderr):
@@ -128,10 +130,10 @@ def get_response_from_pk(
     view_mode: Literal["prompt", "skip", "every", "pipe"],
     save_mode: Literal["prompt", "skip", "every"],
     save_path: Path | None,
-):
+) -> None:
     """Drill down into ARS PK to get a response of interest."""
     target_url: str
-    body: dict
+    body: dict[str, Any]
     try:
         target_url, body = get_ars_trace(pk)
         if target_url == "":

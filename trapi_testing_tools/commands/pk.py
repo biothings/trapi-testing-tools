@@ -11,10 +11,8 @@ app = typer.Typer(
 )
 
 
-@app.command(
-    help="Drill down into ARS PK to get a response of interest.", no_args_is_help=True
-)
-def pk(
+@app.command(no_args_is_help=True)
+def pk(  # noqa:PLR0913
     pk: Annotated[
         str, typer.Argument(help="The Primary Key of a given ARS query run.")
     ],
@@ -57,7 +55,8 @@ def pk(
             help="Instead of viewing, output response directly to stdout for piping",
         ),
     ] = False,
-):
+) -> None:
+    """Drill down into ARS PK to get a response of interest."""
     view_mode = "prompt"
     save_mode = "prompt"
     if view is not None:

@@ -6,7 +6,8 @@ app = typer.Typer(
 )
 
 
-@app.command("analyze | a", help="Perform some analysis on a response.")
+@app.command("analyze | a")
 def analyze(a: str) -> None:
     """Run a given analysis on a response."""
+    # TODO take from pipe or from path arg (kwarg)
     pass

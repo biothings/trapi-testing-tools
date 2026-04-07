@@ -6,46 +6,45 @@ import zipfile
 from contextlib import redirect_stdout
 from pathlib import Path
 from sys import stderr
-from types import ModuleType
-from typing import Any, Literal, cast, get_args
+from types import CoroutineType, ModuleType
+from typing import Any, Literal, cast, get_args, override
 
 import httpx
-import yaml
 from InquirerPy import inquirer
 from natsort import natsorted
 from platformdirs import PlatformDirs
 from rich import progress
-from rich.console import Console, Group, RenderHook
+from rich.console import Console, ConsoleRenderable, Group, RenderHook
 from rich.live import Live
 from rich.text import Text
 
 from tests.base_test import Test
+from trapi_testing_tools.config import CONFIG
 from trapi_testing_tools.types import HTTPMethod, Query
 
 SYNC_BASIC_CLIENT = httpx.Client(follow_redirects=True, timeout=None)
 ASYNC_BASIC_CLIENT = httpx.AsyncClient(follow_redirects=True, timeout=None)
 console = Console(stderr=True)
 
-with open(Path(__file__).parent.joinpath("../config.yaml").resolve()) as config_file:
-    config = yaml.safe_load(config_file)
 
 ENVIRONMENT_MAPPING = dict[str, str]()
 default = None
-for env, levels in config["environments"].items():
-    if env == "default":
-        default = levels
-        continue
+for env, levels in CONFIG.environments.items():
     for level, url in levels.items():
         ENVIRONMENT_MAPPING[f"{env}.{level}"] = url
 
-if default:
-    for level, url in config["environments"][default].items():
-        ENVIRONMENT_MAPPING[level] = url
+for level, url in CONFIG.environments[CONFIG.default_environment].items():
+    ENVIRONMENT_MAPPING[level] = url
 
 
 class IndentedBlock(RenderHook):
-    def process_renderables(self, renderables):
-        new_renderables = []
+    """Render as an indented block."""
+
+    @override
+    def process_renderables(
+        self, renderables: list[ConsoleRenderable]
+    ) -> list[ConsoleRenderable]:
+        new_renderables = list[ConsoleRenderable]()
         for renderable in renderables:
             if isinstance(renderable, Text):
                 new_renderables.append(Text("│ ", style="rule.line", end=""))
@@ -58,6 +57,7 @@ def should_output(
     output_type: Literal["view", "save"],
     mode: Literal["prompt", "skip", "every"],
 ) -> bool:
+    """Based on user view/output flags, determine if the current item should be output."""
     if output is None or mode == "skip":
         return False
     output = True
@@ -70,15 +70,16 @@ def should_output(
 
 
 def handle_output(
-    output: object,
+    output: object | None,
     view_mode: Literal["prompt", "skip", "every", "pipe"],
     save_mode: Literal["prompt", "skip", "every"],
     save_path: Path | None,
-):
+) -> None:
+    """Based on the given view/output modes, handle user appropriate interactions."""
     if output is None:
         return
     if view_mode == "pipe":
-        print(json.dumps(output) if isinstance(output, (dict, list)) else output)
+        print(json.dumps(output) if isinstance(output, dict | list) else output)
         return
 
     if should_output(output, "view", view_mode):
@@ -104,7 +105,7 @@ def handle_output(
                         only_directories=True,
                     ).execute()
                 )
-        with open(save_path, "w", encoding="utf8") as file:
+        with save_path.open("w", encoding="utf8") as file:
             if isinstance(output, dict):
                 json.dump(output, file)
             else:
@@ -168,9 +169,10 @@ def parse_query(query_module: ModuleType) -> list[Query]:
     return queries
 
 
-def cache_tests():
+def cache_tests() -> None:
+    """Cache repo tests locally."""
     try:
-        test_repo = config["test_repo"]
+        test_repo = CONFIG.test_repo
 
         # Prep a cache directory
         dirs = PlatformDirs("trapi-testing-tools", "biothings")
@@ -190,7 +192,7 @@ def cache_tests():
             remote_update = body["updated_at"]
             local_update = ""
             if local_update_file.exists():
-                with open(local_update_file, encoding="utf8") as file:
+                with local_update_file.open(encoding="utf8") as file:
                     local_update = file.read()
                 needs_update = local_update != remote_update
 
@@ -209,7 +211,7 @@ def cache_tests():
 
             status.update("Getting repository contents...")
             with (
-                open(archive_path, "wb") as archive_file,
+                archive_path.open("wb") as archive_file,
                 SYNC_BASIC_CLIENT.stream(
                     "GET",
                     f"{repo_url}/zipball",
@@ -238,7 +240,7 @@ def cache_tests():
             # Now that everything has succeeded, we can set the update date
             status.update("Writing update date...")
             if not local_update_file.exists():
-                with open(local_update_file, "w", encoding="utf8") as file:
+                with local_update_file.open("w", encoding="utf8") as file:
                     file.write(remote_update)
 
         console.print(
@@ -258,16 +260,16 @@ def cache_tests():
 
 def select_tests(test_type: Literal["asset", "case", "suite"]) -> list[Path]:
     """Prompt user to fuzzy-select tests using test ID/name/desc."""
-    test_repo = config["test_repo"]
+    test_repo = CONFIG.test_repo
     dirs = PlatformDirs("trapi-testing-tools", "biothings")
     cache_dir = dirs.user_cache_path / f"tests/{test_repo.replace('/', '~')}"
 
     test_dir = cache_dir / f"repo/test_{test_type}s"
     test_files = test_dir.glob("*.json")
-    file_prompts = []
-    prompt_to_fpath = {}
+    file_prompts = list[str]()
+    prompt_to_fpath = dict[str, Path]()
     for test_path in test_files:
-        with open(test_path) as file:
+        with test_path.open() as file:
             test = json.load(file)
             desc = test["description"] if test_type == "suite" else test["name"]
             if desc is None:
@@ -288,7 +290,13 @@ def select_tests(test_type: Literal["asset", "case", "suite"]) -> list[Path]:
     return [prompt_to_fpath[prompt] for prompt in selection]
 
 
-async def check_api(instance_name, instance_url, max_name_len, progress):
+async def check_api(
+    instance_name: str,
+    instance_url: str,
+    max_name_len: int,
+    progress: progress.Progress,
+) -> bool:
+    """Check that the given API is responsive, updating the given status."""
     task = progress.add_task(f" {instance_name:>{max_name_len}} querying...", total=1)
     try:
         response = await ASYNC_BASIC_CLIENT.get(f"{instance_url}/query", timeout=10)
@@ -317,17 +325,19 @@ async def check_api(instance_name, instance_url, max_name_len, progress):
             completed=1,
         )
         progress.stop()
+        return False
 
 
-def check_apps_responsive(apps):
+def check_apps_responsive(apps: list[tuple[str, dict[str, str]]]) -> None:
+    """Check that a given list of apps are responsive."""
     for app_name, instances in apps:
         if app_name == "default":
             continue
         console.print(f"[rule.line]{app_name}:[/]")
 
-        max_name_len = max(*[len(key) for key in instances.keys() if key != "local"])
-        statuses = []
-        async_tasks = []
+        max_name_len = max(*[len(key) for key in instances if key != "local"])
+        statuses = list[progress.Progress]()
+        async_tasks = list[CoroutineType[None, None, bool]]()
 
         for instance_name, instance_url in instances.items():
             if instance_name == "local":

@@ -1,8 +1,8 @@
 ---
 timeout: 300
 test_repo: NCATSTranslator/Tests
+default_environment: retriever
 environments:
-  default: bte
   bte:
     local: http://localhost:3000/v1
     ci: https://bte.ci.transltr.io/v1
@@ -16,8 +16,8 @@ environments:
     prod: https://aragorn.transltr.io/aragorn
   retriever:
     local: http://localhost:8080
-    dev: https://retriever.bte.ncats.io
-    dev.alt: https://dev.retriever.biothings.io
+    ci: https://retriever.ci.transltr.io
+    dev: https://dev.retriever.biothings.io
   shepherd:
     aragorn.dev: https://shepherd.renci.org/aragorn
     arax.dev: https://shepherd.renci.org/arax
