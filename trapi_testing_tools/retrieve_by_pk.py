@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import redirect_stdout
 from pathlib import Path
 from sys import stderr
@@ -5,43 +6,63 @@ from typing import Any, Literal, cast
 
 import httpx
 from InquirerPy import inquirer
+from rich import progress
 from rich.console import Console
 from urlextract import URLExtract
 
+from trapi_testing_tools.config import CONFIG
 from trapi_testing_tools.utils import handle_output
 
 console = Console(stderr=True)
-client = httpx.Client(follow_redirects=True, timeout=300)
+client = httpx.AsyncClient(follow_redirects=True, timeout=300)
+
+
+async def check_ars_pk(
+    lvl: str, pk: str, status: progress.Progress
+) -> dict[str, Any] | None:
+    """Check the ars for a given pk."""
+    response = await client.get(f"{CONFIG.environments['ars'][lvl]}/{pk}?trace=y")
+    task = status.add_task(f"Querying ARS {lvl.capitalize()}...")
+
+    if response.status_code == 404:
+        status.update(
+            task,
+            description=f"[red]x[/] ARS {lvl.capitalize()} 404",
+            completed=1,
+        )
+        return
+
+    response.raise_for_status()
+    status.update(
+        task,
+        description=f"[green]✓[/] ARS {lvl.capitalize()} has response",
+        completed=1,
+    )
+    return response.json()
 
 
 def get_ars_trace(pk: str) -> tuple[str, dict[str, Any]]:
     """Query the ARS instances until the pk is found, returning the trace."""
-    levels = dict(
-        prod="https://ars-prod.transltr.io/ars/api/messages",
-        test="https://ars.test.transltr.io/ars/api/messages",
-        ci="https://ars.ci.transltr.io/ars/api/messages",
-        dev="https://ars-dev.transltr.io/ars/api/messages",
+    levels = list(CONFIG.environments["ars"].keys())
+    task_group = progress.Progress(
+        progress.SpinnerColumn(finished_text=""),
+        progress.TextColumn("{task.description}"),
+        console=console,
     )
-    target_url = ""
-    response: httpx.Response = httpx.Response(404)
+    queries = [check_ars_pk(lvl, pk, task_group) for lvl in levels]
 
-    with console.status("Querying ARS Prod for details...") as status:
-        for level, url in levels.items():
-            query = f"{url}/{pk}?trace=y"
-            status.update(f"Query ARS {level.capitalize()} for details...")
-            console.print(f"GET {query}")
-            response = client.get(query)
-            if response.status_code != 404:
-                console.print(f"Got response from ARS {level.capitalize()}")
-                target_url = url
-                break
+    with task_group:
+        loop = asyncio.get_event_loop()
+        responses = dict(
+            zip(levels, loop.run_until_complete(asyncio.gather(*queries)), strict=True)
+        )
 
-    if target_url == "":
+        for lvl, response in responses.items():
+            if response is not None:
+                return CONFIG.environments["ars"][lvl], response
+
         console.print("Unable to find PK on any ARS instances.")
-        return target_url, {}
-
-    response.raise_for_status()
-    return target_url, response.json()
+        return "", {}
 
 
 def get_ars_ara_response(
@@ -150,7 +171,7 @@ def get_response_from_pk(
 
     try:
         if inquirer.confirm(
-            "Scan response logs for original response url?", default=True
+            "Scan response logs for original response url?", default=False
         ).execute():
             response = check_logs(body)
             if response is not None:
