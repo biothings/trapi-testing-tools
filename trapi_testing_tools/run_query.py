@@ -22,7 +22,9 @@ from trapi_testing_tools.utils import IndentedBlock, handle_output, parse_query
 console = Console(stderr=True)
 
 
-CLIENT = httpx.Client(follow_redirects=True, timeout=CONFIG.timeout)
+CLIENT = httpx.Client(
+    follow_redirects=True, timeout=CONFIG.timeout if CONFIG.timeout >= 0 else None
+)
 
 
 def run_queries(
