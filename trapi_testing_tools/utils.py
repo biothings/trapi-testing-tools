@@ -105,6 +105,7 @@ def handle_output(
                         only_directories=True,
                     ).execute()
                 )
+        save_path.parent.mkdir(parents=True, exist_ok=True)
         with save_path.open("w", encoding="utf8") as file:
             if isinstance(output, dict):
                 json.dump(output, file)
