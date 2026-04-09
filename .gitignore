@@ -6,3 +6,4 @@ __pycache__
 queries/*
 !queries/routine
 !queries/additional
+responses/*
