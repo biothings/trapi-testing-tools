@@ -85,7 +85,11 @@ def handle_output(
     if should_output(output, "view", view_mode):
         if isinstance(output, dict):
             subprocess.run(
-                "fx", input=json.dumps(output), shell=True, text=True, check=False
+                CONFIG.viewer,
+                input=json.dumps(output),
+                shell=True,
+                text=True,
+                check=False,
             )
         else:
             subprocess.run(

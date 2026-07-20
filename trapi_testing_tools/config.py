@@ -40,6 +40,7 @@ class TTTConfig(BaseSettings):
     timeout: float = 300
     test_repo: str = "NCATSTranslator/Tests"
     default_environment: str = "retriever"
+    viewer: str = "fx"
     environments: dict[str, dict[str, str]] = Field(
         default_factory=lambda: DEFAULT_ENVS
     )

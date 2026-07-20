@@ -4,7 +4,7 @@ A set of command-line tools for rapidly testing and analyzing various TRAPI reso
 
 ## Getting started
 
-Install fx: [https://fx.wtf/install](https://fx.wtf/install)
+Install a JSON viewer for inspecting responses. The default is fx: [https://fx.wtf/install](https://fx.wtf/install). You can use different viewers (such as [jless](https://jless.io/)), see [Configuring the response viewer](#configuring-the-response-viewer).
 
 This project uses uv for package/dependency management. Install instructions: [https://docs.astral.sh/uv/getting-started/installation/](https://docs.astral.sh/uv/getting-started/installation/)
 
@@ -81,8 +81,19 @@ Queries placed under the `trapi_testing_tools/queries/routine` directory will be
 
 you can instead supply a list named `steps` with the above values as dictionary entries if you need to test consecutive related queries. See [`trapi_testing_tools/queries/routine/feature/caching/cache.py`](https://github.com/biothings/bte-hurl/blob/main/trapi_testing_tools/queries/routine/feature/caching/cache.py) for a good example.
 
-### Adding services to test
+## Adding services to test
 
 Services are specified in [`config.yaml`](https://github.com/biothings/bte-hurl/blob/main/config.yaml). See the bte entry for an example.
 
 Services are selected either interactively or by adding `-e <service>.<level>` to the command. You can change the default service so you can more quickly type just the level when supplying the option to the command.
+
+## Configuring JSON viewer
+
+You can choose to view responses, in which case a separate viewer program is used. By default, `fx` is used, but this can be configured to any program available in your shell. Configure in `config.yaml`:
+
+```yaml
+viewer: jless
+```
+
+> [!NOTE]
+> The viewer is only used for JSON responses. Non-JSON responses fall back to `less`
