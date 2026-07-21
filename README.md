@@ -4,7 +4,7 @@ A set of command-line tools for rapidly testing and analyzing various TRAPI reso
 
 ## Getting started
 
-Install a JSON viewer for inspecting responses. The default is fx: [https://fx.wtf/install](https://fx.wtf/install). You can use different viewers (such as [jless](https://jless.io/)), see [Configuring the response viewer](#configuring-the-response-viewer).
+Install a JSON viewer for inspecting responses. The default is fx: [https://fx.wtf/install](https://fx.wtf/install). You can use different viewers (such as [jless](https://jless.io/)), see [Configuring JSON viewer](#configuring-json-viewer).
 
 This project uses uv for package/dependency management. Install instructions: [https://docs.astral.sh/uv/getting-started/installation/](https://docs.astral.sh/uv/getting-started/installation/)
 
