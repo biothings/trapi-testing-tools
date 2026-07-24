@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import ClassVar, Self, override
+from typing import ClassVar, override
 
 from pydantic import Field, field_validator
 from pydantic_settings import (

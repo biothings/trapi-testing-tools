@@ -2,6 +2,7 @@ from typing import override
 
 import httpx
 
+from tests import trapi
 from tests.base_test import Test, TestResult
 
 
@@ -11,7 +12,10 @@ class NodeCount(Test):
     @override
     @staticmethod
     def test(response: httpx.Response) -> TestResult:
-        node_count = len(response.json()["nodes"].keys())
+        model = trapi.parse_metakg_or_fail(response)
+        if isinstance(model, TestResult):
+            return model
+        node_count = len(model.nodes)
         return TestResult(node_count > 0, f"{node_count} nodes")
 
 
@@ -21,5 +25,8 @@ class EdgeCount(Test):
     @override
     @staticmethod
     def test(response: httpx.Response) -> TestResult:
-        edge_count = len(response.json()["edges"])
+        model = trapi.parse_metakg_or_fail(response)
+        if isinstance(model, TestResult):
+            return model
+        edge_count = len(model.edges)
         return TestResult(edge_count > 0, f"{edge_count} edges")

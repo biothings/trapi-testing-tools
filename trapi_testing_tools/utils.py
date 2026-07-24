@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import zipfile
 from contextlib import redirect_stdout
+from dataclasses import replace
 from pathlib import Path
 from sys import stderr
 from types import CoroutineType, ModuleType
@@ -20,6 +21,7 @@ from rich import progress
 from rich.console import Console, ConsoleRenderable, Group, RenderHook
 from rich.live import Live
 from rich.text import Text
+from translator_tom import TOMBase
 
 from tests.base_test import Test
 from trapi_testing_tools.config import CONFIG
@@ -120,12 +122,31 @@ def handle_output(
                 file.write(str(output))
 
 
+def serialize_body(body: object) -> dict[str, Any] | list[Any] | None:
+    """Normalize a query body to a JSON-serializable dict/list (or None).
+
+    Mostly for handling TOM objects.
+    """
+    if body is None or isinstance(body, dict | list):
+        return cast("dict[str, Any] | list[Any] | None", body)
+
+    if isinstance(body, TOMBase):
+        return body.to_dict()
+
+    raise AttributeError(
+        "Query body must be a dict, list, TOM model, or None."
+    )
+
+
 def parse_query(query_module: ModuleType) -> list[Query]:
     """Check that query has required options."""
     queries: list[Query]
 
     if hasattr(query_module, "steps"):
-        queries = query_module.steps
+        # Normalize in case of TOM object
+        queries = [
+            replace(step, body=serialize_body(step.body)) for step in query_module.steps
+        ]
     else:
         method = getattr(query_module, "method", "GET")
         if not isinstance(method, str) or method not in get_args(HTTPMethod):
@@ -152,9 +173,8 @@ def parse_query(query_module: ModuleType) -> list[Query]:
                 "Query headers must a dict of header-value string pairs."
             )
 
-        body = getattr(query_module, "body", None)
-        if not isinstance(body, dict | list | None):
-            raise AttributeError("Query body must be serializable to JSON.")
+        # Normalize in case of TOM object
+        body = serialize_body(getattr(query_module, "body", None))
 
         tests = getattr(query_module, "tests", None)
         if not isinstance(tests, list | None) or (
@@ -169,7 +189,7 @@ def parse_query(query_module: ModuleType) -> list[Query]:
                 endpoint=endpoint,
                 params=cast(dict[str, Any], params),
                 headers=cast(dict[str, str], headers),
-                body=cast(dict[str, Any] | list[Any] | None, body),
+                body=body,
                 tests=cast(list[type[Test]], tests),
             )
         ]
@@ -308,7 +328,7 @@ async def check_api(
     task = progress.add_task(f" {instance_name:>{max_name_len}} querying...", total=1)
     try:
         response = await ASYNC_BASIC_CLIENT.get(f"{instance_url}/query", timeout=10)
-        if response.status_code != http.HTTPStatus.METHOD_NOT_ALLOWED:
+        if response.status_code != HTTPStatus.METHOD_NOT_ALLOWED:
             response.raise_for_status()
         time = round(response.elapsed.total_seconds() * 1000)
         progress.update(

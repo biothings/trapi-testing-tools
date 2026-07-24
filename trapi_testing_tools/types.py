@@ -1,20 +1,16 @@
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Literal
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any, Literal
 
 from tests.base_test import Test
 
-
-class LogLevel(str, Enum):
-    """Common TRAPI log levels."""
-
-    ERROR = "ERROR"
-    WARNING = "WARNING"
-    INFO = "INFO"
-    DEBUG = "DEBUG"
+if TYPE_CHECKING:
+    # translator_tom (TOM) is only referenced for typing; it is imported lazily at
+    # runtime (in parse_query) so TOM-less, raw-dict query authoring never loads it.
+    from translator_tom import TOMBase
 
 
-class TestType(str, Enum):
+class TestType(StrEnum):
     """Type of test in the automated testing suite."""
 
     asset = "asset"
@@ -40,5 +36,5 @@ class Query:
     endpoint: str | None = None
     params: dict[str, Any] = field(default_factory=dict)
     headers: dict[str, str] = field(default_factory=dict)
-    body: dict[str, Any] | list[Any] | None = None
+    body: "dict[str, Any] | list[Any] | TOMBase | None" = None
     tests: list[type[Test]] | None = None

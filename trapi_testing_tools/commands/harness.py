@@ -6,8 +6,9 @@ from typing import Annotated, cast
 import typer
 from InquirerPy.prompts.fuzzy import FuzzyPrompt
 from rich.console import Console
+from translator_tom import LogLevel
 
-from trapi_testing_tools.types import LogLevel, TestType
+from trapi_testing_tools.types import TestType
 from trapi_testing_tools.utils import ENVIRONMENT_MAPPING, select_tests
 
 console = Console(stderr=True)

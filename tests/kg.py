@@ -2,6 +2,7 @@ from typing import override
 
 import httpx
 
+from tests import trapi
 from tests.base_test import Test, TestResult
 
 
@@ -11,8 +12,11 @@ class NodeCount(Test):
     @override
     @staticmethod
     def test(response: httpx.Response) -> TestResult:
-        body = response.json()
-        node_count = len(body["message"]["knowledge_graph"]["nodes"].keys())
+        model = trapi.parse_or_fail(response)
+        if isinstance(model, TestResult):
+            return model
+        kg = model.message.knowledge_graph
+        node_count = len(kg.nodes) if kg else 0
         return TestResult(node_count > 0, f"{node_count} nodes")
 
 
@@ -22,8 +26,11 @@ class EdgeCount(Test):
     @override
     @staticmethod
     def test(response: httpx.Response) -> TestResult:
-        body = response.json()
-        edge_count = len(body["message"]["knowledge_graph"]["edges"].keys())
+        model = trapi.parse_or_fail(response)
+        if isinstance(model, TestResult):
+            return model
+        kg = model.message.knowledge_graph
+        edge_count = len(kg.edges) if kg else 0
         return TestResult(edge_count > 0, f"{edge_count} edges")
 
 
@@ -33,26 +40,20 @@ class SourceRecordURLs(Test):
     @override
     @staticmethod
     def test(response: httpx.Response) -> TestResult:
-        body = response.json()
+        model = trapi.parse_or_fail(response)
+        if isinstance(model, TestResult):
+            return model
 
-        has_source_record_urls = next(
-            (
-                edge
-                for edge in body["message"]["knowledge_graph"]["edges"].values()
-                if len(
-                    [
-                        source
-                        for source in edge["sources"]
-                        if source.get("source_record_urls", None) is not None
-                    ]
-                )
-                > 0
-            ),
-            False,
+        kg = model.message.knowledge_graph
+        edges = kg.edges if kg else {}
+        has_source_record_urls = any(
+            source.source_record_urls
+            for edge in edges.values()
+            for source in edge.sources
         )
         return TestResult(
-            has_source_record_urls > 0,
-            "No edge has source_record_urls" if not has_source_record_urls else None,
+            has_source_record_urls,
+            None if has_source_record_urls else "No edge has source_record_urls",
         )
 
 
@@ -62,20 +63,18 @@ class HasKLAT(Test):
     @override
     @staticmethod
     def test(response: httpx.Response) -> TestResult:
-        body = response.json()
+        model = trapi.parse_or_fail(response)
+        if isinstance(model, TestResult):
+            return model
 
-        missing = list[str]()
-        for edge_id, edge in body["message"]["knowledge_graph"]["edges"].items():
-            if (
-                not len(
-                    [
-                        attr
-                        for attr in edge["attributes"]
-                        if attr["attribute_type_id"]
-                        in ["biolink:knowledge_level", "biolink:agent_type"]
-                    ]
-                )
-                >= 2  # noqa: PLR2004
-            ):
-                missing.append(edge_id)
-        return TestResult(len(missing) == 0, missing if len(missing) == 0 else None)
+        required = {"biolink:knowledge_level", "biolink:agent_type"}
+        kg = model.message.knowledge_graph
+        edges = kg.edges if kg else {}
+        missing = [
+            edge_id
+            for edge_id, edge in edges.items()
+            if not required.issubset(
+                {attr.attribute_type_id for attr in (edge.attributes or [])}
+            )
+        ]
+        return TestResult(len(missing) == 0, missing or None)

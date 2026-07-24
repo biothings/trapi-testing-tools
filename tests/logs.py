@@ -4,6 +4,7 @@ from typing import override
 
 import httpx
 
+from tests import trapi
 from tests.base_test import Test, TestResult
 
 
@@ -13,8 +14,10 @@ class NoErrorLogs(Test):
     @override
     @staticmethod
     def test(response: httpx.Response) -> TestResult:
-        body = response.json()
-        error_logs = [log["message"] for log in body["logs"] if "ERROR" in log["level"]]
+        model = trapi.parse_or_fail(response)
+        if isinstance(model, TestResult):
+            return model
+        error_logs = [log.message for log in model.logs if "ERROR" in (log.level or "")]
         return TestResult(
             len(error_logs) == 0, error_logs if len(error_logs) > 0 else None
         )
@@ -26,8 +29,10 @@ class NoDebugLogs(Test):
     @override
     @staticmethod
     def test(response: httpx.Response) -> TestResult:
-        body = response.json()
-        debug_logs = [log["message"] for log in body["logs"] if "DEBUG" in log["level"]]
+        model = trapi.parse_or_fail(response)
+        if isinstance(model, TestResult):
+            return model
+        debug_logs = [log.message for log in model.logs if "DEBUG" in (log.level or "")]
         return TestResult(
             len(debug_logs) == 0, debug_logs if len(debug_logs) > 0 else None
         )
@@ -39,11 +44,11 @@ class LogOneAPI(Test):
     @override
     @staticmethod
     def test(response: httpx.Response) -> TestResult:
-        body = response.json()
+        model = trapi.parse_or_fail(response)
+        if isinstance(model, TestResult):
+            return model
 
-        has_log = next(
-            (log for log in body["logs"] if "(1) unique API" in log["message"]), False
-        )
+        has_log = any("(1) unique API" in (log.message or "") for log in model.logs)
         return TestResult(
             has_log,
             "Missing log stating single unique API used" if not has_log else None,
@@ -56,23 +61,23 @@ class MissingIDLog(Test):
     @override
     @staticmethod
     def test(response: httpx.Response) -> TestResult:
-        body = response.json()
+        model = trapi.parse_or_fail(response)
+        if isinstance(model, TestResult):
+            return model
 
-        has_log = next(
-            (
-                log
-                for log in body["logs"]
-                if re.match(
-                    r"Specified SmartAPI ID(.*) is either invalid or missing.",
-                    log["message"],
-                )
-                and log["level"] == "ERROR"
-            ),
-            False,
+        has_log = any(
+            log.level == "ERROR"
+            and re.match(
+                r"Specified SmartAPI ID(.*) is either invalid or missing.",
+                log.message or "",
+            )
+            for log in model.logs
         )
         return TestResult(
             has_log,
-            "Missing log stating single unique API used" if not has_log else None,
+            "Missing log stating SmartAPI ID is invalid or missing"
+            if not has_log
+            else None,
         )
 
 
@@ -82,17 +87,15 @@ class FoundCacheLog(Test):
     @override
     @staticmethod
     def test(response: httpx.Response) -> TestResult:
-        body = response.json()
+        model = trapi.parse_or_fail(response)
+        if isinstance(model, TestResult):
+            return model
 
-        has_log = next(
-            (
-                log
-                for log in body["logs"]
-                if re.search(r"\([1-9][0-9]*\) cached qEdges", log["message"])
-            ),
-            False,
+        has_log = any(
+            re.search(r"\([1-9][0-9]*\) cached qEdges", log.message or "")
+            for log in model.logs
         )
-        return TestResult(has_log, "No logs report cached qEdges." if has_log else None)
+        return TestResult(has_log, None if has_log else "No logs report cached qEdges.")
 
 
 class CacheBypassLog(Test):
@@ -101,18 +104,15 @@ class CacheBypassLog(Test):
     @override
     @staticmethod
     def test(response: httpx.Response) -> TestResult:
-        body = response.json()
+        model = trapi.parse_or_fail(response)
+        if isinstance(model, TestResult):
+            return model
 
-        has_log = next(
-            (
-                log
-                for log in body["logs"]
-                if "REDIS cache is not enabled." in log["message"]
-            ),
-            False,
+        has_log = any(
+            "REDIS cache is not enabled." in (log.message or "") for log in model.logs
         )
         return TestResult(
-            has_log, "No logs indicating cache bypass." if has_log else None
+            has_log, None if has_log else "No logs indicating cache bypass."
         )
 
 
@@ -122,18 +122,24 @@ class NoCacheHits(Test):
     @override
     @staticmethod
     def test(response: httpx.Response) -> TestResult:
-        body = response.json()
+        model = trapi.parse_or_fail(response)
+        if isinstance(model, TestResult):
+            return model
 
         cache_hits = [
             log
-            for log in body["logs"]
-            if re.search(r"\([1-9][0-9]*\) cached qEdges", log["message"])
+            for log in model.logs
+            if re.search(r"\([1-9][0-9]*\) cached qEdges", log.message or "")
         ]
 
         message: str | None = None
         if len(cache_hits) > 0:
             message = json.dumps(
-                {"note": "Logs indicate cache hit.", "logs": cache_hits}, indent=2
+                {
+                    "note": "Logs indicate cache hit.",
+                    "logs": [log.to_dict() for log in cache_hits],
+                },
+                indent=2,
             )
 
         return TestResult(len(cache_hits) == 0, message)
@@ -145,15 +151,13 @@ class DryRunLog(Test):
     @override
     @staticmethod
     def test(response: httpx.Response) -> TestResult:
-        body = response.json()
-        has_log = next(
-            (
-                log
-                for log in body["logs"]
-                if "Running dryrun of query, no API calls will be performed. Actual query execution order may vary based on API responses received."
-                in log["message"]
-            ),
-            False,
+        model = trapi.parse_or_fail(response)
+        if isinstance(model, TestResult):
+            return model
+        has_log = any(
+            "Running dryrun of query, no API calls will be performed. Actual query execution order may vary based on API responses received."
+            in (log.message or "")
+            for log in model.logs
         )
 
         return TestResult(has_log, "Missing dryrun log" if not has_log else None)

@@ -133,7 +133,6 @@ def run_query(query: Query, url: str) -> tuple[httpx.Response | None, bool]:
     """Run an individual query, handling sync or async intelligently."""
     response: httpx.Response | None = None
     elapsed = 0.0
-    uncertainty = 0
     passed = True
 
     console.print(f"{query.method} {url}{query.endpoint}")
@@ -156,48 +155,7 @@ def run_query(query: Query, url: str) -> tuple[httpx.Response | None, bool]:
         if "asyncquery" not in cast(str, query.endpoint):
             return response, passed
 
-        status_url = url + "/asyncquery_status/" + body["job_id"]
-        status = body["status"]
-
-        # Poll for response from async status endpoint
-        with console.status("Polling status endpoint every 10s...") as task_status:
-            timeout = time.time() + CONFIG.timeout
-            timed_out = False
-            attempt = 0
-            console.print(f"GET {status_url} (polling)")
-
-            while status in ["Accepted", "Queued", "Running"]:
-                if time.time() > timeout:
-                    timed_out = True
-                    break
-
-                if attempt > 0:
-                    time.sleep(10)
-                    elapsed += 10
-                    uncertainty = 10  # Could have finished any time in interval
-
-                attempt += 1
-                task_status.update(f"Polling status endpoint every 10s...({attempt})")
-                response = CLIENT.get(status_url)
-                response.raise_for_status()
-                body = cast(dict[str, Any], response.json())
-                status = body["status"]
-
-        if timed_out:
-            console.print("Query timed out.")
-            passed = False
-            return response, passed
-
-        response_url = body.get("response_url", None)
-        if response_url is None:
-            console.print("No response url found, query may have failed.")
-            return response, passed
-
-        with console.status("Querying response endpoint..."):
-            console.print(f"GET {response_url}")
-            response = CLIENT.get(response_url)
-            response.raise_for_status()
-            elapsed += response.elapsed.total_seconds()
+        return _await_async_result(response, body, url, elapsed)
 
     except httpx.HTTPStatusError as error:
         console.print(error)
@@ -207,10 +165,73 @@ def run_query(query: Query, url: str) -> tuple[httpx.Response | None, bool]:
         console.print(error)
         passed = False
 
+    console.print(f"total query elapsed time: {elapsed} (±0)s", highlight=False)
+    return response, passed
+
+
+def _await_async_result(
+    response: httpx.Response, body: dict[str, Any], url: str, elapsed: float
+) -> tuple[httpx.Response | None, bool]:
+    """Poll asyncquery_status to completion, then fetch the final response."""
+    status_url = url + "/asyncquery_status/" + body["job_id"]
+
+    response, body, elapsed, uncertainty, timed_out = _poll_async_status(
+        status_url, response, body, elapsed
+    )
+
+    if timed_out:
+        console.print("Query timed out.")
+        return response, False
+
+    response_url = body.get("response_url", None)
+    if response_url is None:
+        console.print("No response url found, query may have failed.")
+        return response, True
+
+    with console.status("Querying response endpoint..."):
+        console.print(f"GET {response_url}")
+        response = CLIENT.get(response_url)
+        response.raise_for_status()
+        elapsed += response.elapsed.total_seconds()
+
     console.print(
         f"total query elapsed time: {elapsed} (±{uncertainty})s", highlight=False
     )
-    return response, passed
+    return response, True
+
+
+def _poll_async_status(
+    status_url: str, response: httpx.Response, body: dict[str, Any], elapsed: float
+) -> tuple[httpx.Response, dict[str, Any], float, int, bool]:
+    """Poll every 10s while the job is Accepted/Queued/Running; stop on finish/timeout.
+
+    Returns the latest response and body, the accumulated elapsed time and its
+    uncertainty, and whether polling timed out.
+    """
+    status = body["status"]
+    uncertainty = 0
+    with console.status("Polling status endpoint every 10s...") as task_status:
+        deadline = time.time() + CONFIG.timeout
+        attempt = 0
+        console.print(f"GET {status_url} (polling)")
+
+        while status in ["Accepted", "Queued", "Running"]:
+            if time.time() > deadline:
+                return response, body, elapsed, uncertainty, True
+
+            if attempt > 0:
+                time.sleep(10)
+                elapsed += 10
+                uncertainty = 10  # Could have finished any time in interval
+
+            attempt += 1
+            task_status.update(f"Polling status endpoint every 10s...({attempt})")
+            response = CLIENT.get(status_url)
+            response.raise_for_status()
+            body = cast(dict[str, Any], response.json())
+            status = body["status"]
+
+    return response, body, elapsed, uncertainty, False
 
 
 def run_tests(query: Query, response: httpx.Response) -> tuple[int, int]:
