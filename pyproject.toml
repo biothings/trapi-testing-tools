@@ -143,3 +143,7 @@ reportAny = false
 reportExplicitAny = false
 reportUnusedCallResult = false # Just makes code look worse; Usually unused results are deliberately ignored
 reportMissingTypeStubs = false # Sometimes type stubs aren't available and auto-gen is incorrect
+
+[tool.uv]
+# Faster first-time startup by offloading compilation to sync
+compile-bytecode = true
