@@ -7,7 +7,7 @@ from types import ModuleType
 from typing import Any, cast
 
 import httpx
-from InquirerPy import inquirer
+from InquirerPy.prompts.confirm import ConfirmPrompt
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
@@ -54,7 +54,7 @@ def run_queries(
                 f"ERROR: failed to read query file due to {error!r}. The query will be skipped."
             )
             with redirect_stdout(stderr):
-                if inquirer.confirm(
+                if ConfirmPrompt(
                     "Print traceback for this error?", default=False
                 ).execute():
                     console.print_exception(show_locals=True)
@@ -259,7 +259,7 @@ def run_tests(query: Query, response: httpx.Response) -> tuple[int, int]:
                 f"[red]![/] {i + 1}. {test.__name__}: An error occurred in this test: {error!r}"
             )
             with redirect_stdout(stderr):
-                if inquirer.confirm(
+                if ConfirmPrompt(
                     "Print traceback for this error?", default=False
                 ).execute():
                     console.print_exception(show_locals=True)

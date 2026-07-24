@@ -4,7 +4,7 @@ from sys import stderr
 from typing import Literal, overload
 
 import typer
-from InquirerPy import inquirer
+from InquirerPy.prompts.fuzzy import FuzzyPrompt
 from rich.console import Console
 
 import queries as query_list
@@ -43,7 +43,7 @@ def set_queries(
             for path in Path(query_list.__path__[0]).rglob("**/*.py")
         ]
         with redirect_stdout(stderr):
-            selection = inquirer.fuzzy(  # pyright:ignore[reportPrivateImportUsage]
+            selection: list[str] = FuzzyPrompt(
                 message="Select query file(s)...",
                 choices=valid_files,
                 multiselect=multi,
@@ -70,7 +70,7 @@ def set_environment(environment: str | None) -> tuple[str, bool]:
     used_interactive = False
     if environment is None:
         with redirect_stdout(stderr):
-            environment = inquirer.fuzzy(  # pyright:ignore[reportPrivateImportUsage]
+            environment = FuzzyPrompt(
                 message="Select environment...",
                 choices=[key for key in ENVIRONMENT_MAPPING if "." in key],
                 instruction="(Type to filter, Tab to select, Enter to confirm)",

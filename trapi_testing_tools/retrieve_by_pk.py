@@ -1,11 +1,13 @@
 import asyncio
 from contextlib import redirect_stdout
+from http import HTTPStatus
 from pathlib import Path
 from sys import stderr
 from typing import Any, Literal, cast
 
 import httpx
-from InquirerPy import inquirer
+from InquirerPy.prompts.confirm import ConfirmPrompt
+from InquirerPy.prompts.fuzzy import FuzzyPrompt
 from rich import progress
 from rich.console import Console
 from urlextract import URLExtract
@@ -24,7 +26,7 @@ async def check_ars_pk(
     response = await client.get(f"{CONFIG.environments['ars'][lvl]}/{pk}?trace=y")
     task = status.add_task(f"Querying ARS {lvl.capitalize()}...")
 
-    if response.status_code == 404:
+    if response.status_code == HTTPStatus.NOT_FOUND:
         status.update(
             task,
             description=f"[red]x[/] ARS {lvl.capitalize()} 404",
@@ -84,7 +86,7 @@ def get_ars_ara_response(
     else:
         if ara is not None:
             console.print(f"Warning: pre-selected ara '{ara}' not a valid actor")
-        selection = inquirer.fuzzy(
+        selection = FuzzyPrompt(
             message="Select ARA to retrieve response of:",
             choices=[actor.removeprefix("ara-") for actor in actors],
             border=True,
@@ -121,7 +123,7 @@ def check_logs(body: dict[str, Any]) -> dict[str, Any] | None:
     selection = possible_logs[0]
     if len(possible_logs) > 1:
         with redirect_stdout(stderr):
-            selection = inquirer.fuzzy(
+            selection = FuzzyPrompt(
                 message="Select URL from logs:",
                 choices=possible_logs,
                 border=True,
@@ -141,7 +143,7 @@ def handle_error(msg: str, error: Exception) -> None:
     """Print some `msg` and error name, prompting to print traceback."""
     console.print(f"ERROR: {msg} due to {error!r}")
     with redirect_stdout(stderr):
-        if inquirer.confirm("Print traceback for this error?", default=False).execute():
+        if ConfirmPrompt("Print traceback for this error?", default=False).execute():
             console.print_exception(show_locals=True)
 
 
@@ -170,7 +172,7 @@ def get_response_from_pk(
         return
 
     try:
-        if inquirer.confirm(
+        if ConfirmPrompt(
             "Scan response logs for original response url?", default=False
         ).execute():
             response = check_logs(body)

@@ -7,7 +7,7 @@ from types import ModuleType
 from typing import Annotated
 
 import typer
-from InquirerPy import inquirer
+from InquirerPy.prompts.confirm import ConfirmPrompt
 from rich.console import Console
 
 import trapi_testing_tools
@@ -48,7 +48,7 @@ def curl(
 
     if (
         len(queries) > 1
-        and not inquirer.confirm(
+        and not ConfirmPrompt(
             "Query file defines multiple steps, print all (Will print first otherwise)?",
             default=True,
         ).execute()
@@ -57,19 +57,11 @@ def curl(
 
     for step in queries:
         url = f"{ENVIRONMENT_MAPPING[environment]}{step.endpoint}"
-        params = "&".join(
-            [
-                f"{name}={value}"
-                for name, value in step.params.items()
-            ]
-        )
+        params = "&".join([f"{name}={value}" for name, value in step.params.items()])
         if len(params) > 0:
             url += f"?{params}"
 
-        headers = [
-            f"{name}: {value}"
-            for name, value in step.headers.items()
-        ]
+        headers = [f"{name}: {value}" for name, value in step.headers.items()]
 
         command = [
             f"curl -X {step.method}",
@@ -103,7 +95,7 @@ def check_file(file: Path) -> ModuleType:
     except Exception as error:
         console.print(f"ERROR: failed to read query file due to {error!r}.")
         with redirect_stdout(stderr):
-            if inquirer.confirm(
+            if ConfirmPrompt(
                 "Print traceback for this error?", default=False
             ).execute():
                 console.print_exception(show_locals=True)

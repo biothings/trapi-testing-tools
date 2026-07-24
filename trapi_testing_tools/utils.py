@@ -1,4 +1,5 @@
 import asyncio
+from http import HTTPStatus
 import json
 import shutil
 import subprocess
@@ -10,7 +11,9 @@ from types import CoroutineType, ModuleType
 from typing import Any, Literal, cast, get_args, override
 
 import httpx
-from InquirerPy import inquirer
+from InquirerPy.prompts.confirm import ConfirmPrompt
+from InquirerPy.prompts.filepath import FilePathPrompt
+from InquirerPy.prompts.fuzzy import FuzzyPrompt
 from natsort import natsorted
 from platformdirs import PlatformDirs
 from rich import progress
@@ -64,7 +67,7 @@ def should_output(
     if mode == "every":
         return True
     with redirect_stdout(stderr):  # Otherwise set to "prompt"
-        return inquirer.confirm(
+        return ConfirmPrompt(
             message=f"{output_type.capitalize()} response body?", default=True
         ).execute()
 
@@ -97,14 +100,14 @@ def handle_output(
             )
 
     if should_output(
-        output,
+        output,  # pyright: ignore[reportUnknownArgumentType]
         "save",
         save_mode,
     ):
         if not save_path:
             with redirect_stdout(stderr):
                 save_path = Path(
-                    inquirer.filepath(
+                    FilePathPrompt(
                         message="Enter a path to save to:",
                         only_directories=True,
                     ).execute()
@@ -257,7 +260,7 @@ def cache_tests() -> None:
             f"[red]ERROR:[/]: An error occurred while checking/updating cache: {error!r}"
         )
         with redirect_stdout(stderr):
-            if inquirer.confirm(
+            if ConfirmPrompt(
                 "Print traceback for this error?", default=False
             ).execute():
                 console.print_exception(show_locals=True)
@@ -283,7 +286,7 @@ def select_tests(test_type: Literal["asset", "case", "suite"]) -> list[Path]:
             file_prompts.append(prompt)
             prompt_to_fpath[prompt] = test_path
 
-    selection = inquirer.fuzzy(
+    selection = FuzzyPrompt(
         message=f"Select test {test_type}(s)...",
         choices=natsorted(file_prompts),
         multiselect=True,
@@ -305,7 +308,7 @@ async def check_api(
     task = progress.add_task(f" {instance_name:>{max_name_len}} querying...", total=1)
     try:
         response = await ASYNC_BASIC_CLIENT.get(f"{instance_url}/query", timeout=10)
-        if response.status_code != 405:
+        if response.status_code != http.HTTPStatus.METHOD_NOT_ALLOWED:
             response.raise_for_status()
         time = round(response.elapsed.total_seconds() * 1000)
         progress.update(

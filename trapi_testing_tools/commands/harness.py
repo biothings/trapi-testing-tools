@@ -4,7 +4,7 @@ from sys import stderr
 from typing import Annotated, cast
 
 import typer
-from InquirerPy import inquirer
+from InquirerPy.prompts.fuzzy import FuzzyPrompt
 from rich.console import Console
 
 from trapi_testing_tools.types import LogLevel, TestType
@@ -57,7 +57,7 @@ def harness(
     used_interactive = False  # TODO: output hint if interactive mode used
     if environment is None:
         with redirect_stdout(stderr):
-            environment = inquirer.fuzzy(
+            environment = FuzzyPrompt(
                 message="Select environment...",
                 choices=[key for key in ENVIRONMENT_MAPPING.keys() if "." in key],
                 instruction="(Type to filter, Tab to select, Enter to confirm)",
@@ -76,7 +76,7 @@ def harness(
 
     if test_type is None:
         test_type = TestType[
-            inquirer.fuzzy(
+            FuzzyPrompt(
                 message="Select test type...",
                 choices=[e.value for e in TestType],
                 border=True,
