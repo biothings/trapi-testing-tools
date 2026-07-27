@@ -1,4 +1,4 @@
-from tests import http, kg, logs, results
+from tests.battery import standard_battery
 
 # Using nephrotic syndrome as an example
 method = "POST"
@@ -22,10 +22,4 @@ body = {
         }
     },
 }
-tests = [
-    http.status(200),
-    kg.NodeCount,
-    kg.EdgeCount,
-    results.ResultCount,
-    logs.NoErrorLogs,
-]
+tests = standard_battery()

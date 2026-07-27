@@ -1,4 +1,5 @@
-from tests import http, kg, logs, results
+from tests import logs
+from tests.battery import standard_battery
 
 method = "POST"
 endpoint = "/team/Text%20Mining%20Provider/query"
@@ -20,11 +21,4 @@ body = {
         }
     },
 }
-tests = [
-    http.status(200),
-    kg.NodeCount,
-    kg.EdgeCount,
-    results.ResultCount,
-    logs.NoErrorLogs,
-    logs.LogOneAPI,
-]
+tests = [*standard_battery(), logs.LogOneAPI]

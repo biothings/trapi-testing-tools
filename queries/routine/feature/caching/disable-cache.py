@@ -1,4 +1,5 @@
-from tests import http, kg, logs, results
+from tests import logs
+from tests.battery import standard_battery
 from trapi_testing_tools.types import Query
 
 query_body = {
@@ -19,26 +20,13 @@ steps = [
         endpoint="/query",
         params=dict(caching=False),
         body=query_body,
-        tests=[
-            http.status(200),
-            kg.NodeCount,
-            kg.EdgeCount,
-            results.ResultCount,
-            logs.NoErrorLogs,
-        ],
+        tests=standard_battery(),
     ),
     Query(
         method="POST",
         endpoint="/query",
         params=dict(caching=False),
         body=query_body,
-        tests=[
-            http.status(200),
-            kg.NodeCount,
-            kg.EdgeCount,
-            results.ResultCount,
-            logs.NoErrorLogs,
-            logs.NoCacheHits,
-        ],
+        tests=[*standard_battery(), logs.NoCacheHits],
     ),
 ]

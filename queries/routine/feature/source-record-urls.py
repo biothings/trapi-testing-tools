@@ -1,4 +1,5 @@
-from tests import http, kg, logs, results
+from tests import kg
+from tests.battery import standard_battery
 
 method = "POST"
 endpoint = "/query"
@@ -19,12 +20,5 @@ body = {
         }
     }
 }
-tests = [
-    http.status(200),
-    kg.NodeCount,
-    kg.EdgeCount,
-    kg.SourceRecordURLs,
-    results.ResultCount,
-    logs.NoErrorLogs,
-]
+tests = [*standard_battery(), kg.SourceRecordURLs]
 # jsonpath "$.message.knowledge_graph.edges[*].sources[0].source_record_urls" isString

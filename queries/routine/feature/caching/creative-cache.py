@@ -1,4 +1,5 @@
-from tests import http, kg, logs, results
+from tests import logs
+from tests.battery import standard_battery
 from trapi_testing_tools.types import Query
 
 # Using nephrotic syndrome as an example
@@ -25,25 +26,12 @@ steps = [
         method="POST",
         endpoint="/query",
         body=query_body,
-        tests=[
-            http.status(200),
-            kg.NodeCount,
-            kg.EdgeCount,
-            results.ResultCount,
-            logs.NoErrorLogs,
-        ],
+        tests=standard_battery(),
     ),
     Query(
         method="POST",
         endpoint="/query",
         body=query_body,
-        tests=[
-            http.status(200),
-            kg.NodeCount,
-            kg.EdgeCount,
-            results.ResultCount,
-            logs.NoErrorLogs,
-            logs.FoundCacheLog,
-        ],
+        tests=[*standard_battery(), logs.FoundCacheLog],
     ),
 ]

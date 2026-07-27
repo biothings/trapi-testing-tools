@@ -1,4 +1,5 @@
-from tests import http, kg, logs, results
+from tests import kg
+from tests.battery import standard_battery
 
 method = "POST"
 endpoint = "/smartapi/38e9e5169a72aee3659c9ddba956790d/query"
@@ -19,11 +20,4 @@ body = {
         }
     }
 }
-tests = [
-    http.status(200),
-    kg.NodeCount,
-    kg.EdgeCount,
-    kg.HasKLAT,
-    results.ResultCount,
-    logs.NoErrorLogs,
-]
+tests = [*standard_battery(), kg.HasKLAT]
