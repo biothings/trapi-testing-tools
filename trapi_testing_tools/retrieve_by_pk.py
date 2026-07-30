@@ -3,14 +3,14 @@ from contextlib import redirect_stdout
 from http import HTTPStatus
 from pathlib import Path
 from sys import stderr
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 import httpx
 from InquirerPy.prompts.confirm import ConfirmPrompt
 from InquirerPy.prompts.fuzzy import FuzzyPrompt
-from rich import progress
+from rich import box, progress
 from rich.console import Console
-from urlextract import URLExtract
+from rich.table import Table
 
 from trapi_testing_tools.config import CONFIG
 from trapi_testing_tools.utils import handle_output
@@ -106,37 +106,78 @@ def get_ars_ara_response(
     return response.json()
 
 
-def check_logs(body: dict[str, Any]) -> dict[str, Any] | None:
-    """Check logs for original response URL, prompt user to select, then retrieve response."""
-    logs = body.get("fields", {}).get("data", {}).get("logs", {})
-    if not logs:
-        return
+def _status_style(status: str | None) -> str:
+    """Map an ARS/TRAPI status string to a rich style."""
+    lowered = (status or "").lower()
+    if lowered in ("done", "success"):
+        return "green"
+    if lowered in ("error", "failed"):
+        return "red"
+    return "yellow"
 
-    extractor = URLExtract()
-    possible_logs: list[str] = []
-    for log in logs:  # Possible multiple URLs in one log
-        urls = extractor.find_urls(log["message"])
-        possible_logs.extend(
-            f"{log['message'].split(url, 1)[0]} >{url}< ..." for url in urls
+
+def print_ars_metadata(body: dict[str, Any]) -> None:
+    """Print key ARS metadata from a raw ARS stored response to the terminal."""
+    fields: dict[str, Any] = body.get("fields", {})
+    data: dict[str, Any] = fields.get("data", {})
+    message: dict[str, Any] = data.get("message") or {}
+    result_stat: dict[str, Any] = fields.get("result_stat") or {}
+
+    ara_status = fields.get("status")
+    trapi_status = data.get("status")
+    results = fields.get("result_count")
+    if results is None:
+        results = len(message.get("results") or [])
+
+    table = Table(
+        title="ARS Response Metadata",
+        title_style="bold",
+        box=box.SIMPLE,
+        show_header=False,
+    )
+    table.add_column("Field", style="rule.line", justify="right")
+    table.add_column("Value", overflow="fold")
+
+    table.add_row("PK", str(body.get("pk", "—")))
+    table.add_row("ARA", str(fields.get("name") or "—"))
+    table.add_row(
+        "ARS Status",
+        f"[{_status_style(ara_status)}]{ara_status or '—'}[/] "
+        f"(code {fields.get('code', '—')})",
+    )
+    table.add_row(
+        "TRAPI Status",
+        f"[{_status_style(trapi_status)}]{trapi_status}[/]" if trapi_status else "—",
+    )
+    table.add_row("Results", str(results))
+    if result_stat:
+        stats = {
+            key: (round(value, 3) if isinstance(value, int | float) else value)
+            for key, value in result_stat.items()
+        }
+        table.add_row(
+            "Score Stats",
+            f"min {stats.get('minimum')} / median {stats.get('median')} / "
+            f"mean {stats.get('mean')} / max {stats.get('maximum')}",
         )
+    table.add_row("Logs", str(len(data.get("logs") or [])))
+    table.add_row(
+        "Schema / Biolink",
+        f"{data.get('schema_version') or '—'} / {data.get('biolink_version') or '—'}",
+    )
+    table.add_row("Merged Version", str(fields.get("merged_version") or "—"))
+    table.add_row("Timestamp", str(fields.get("timestamp") or "—"))
+    table.add_row("Updated At", str(fields.get("updated_at") or "—"))
 
-    selection = possible_logs[0]
-    if len(possible_logs) > 1:
-        with redirect_stdout(stderr):
-            selection = FuzzyPrompt(
-                message="Select URL from logs:",
-                choices=possible_logs,
-                border=True,
-                instruction="(Type to filter, Tab to select, Enter to confirm)",
-                info=True,
-            ).execute()
-    url = cast(str, extractor.find_urls(selection)[0])
+    console.print(table)
 
-    console.print(f"Response URL: {url}")
-    with console.status("Querying for original response..."):
-        response = httpx.get(url)
-    response.raise_for_status()
-    return response.json()
+
+def extract_response_payload(body: dict[str, Any]) -> dict[str, Any]:
+    """Extract the TRAPI response payload from a raw ARS stored response.
+
+    Falls back to the raw body if the expected `fields.data` shape is absent.
+    """
+    return body.get("fields", {}).get("data", body)
 
 
 def handle_error(msg: str, error: Exception) -> None:
@@ -171,15 +212,7 @@ def get_response_from_pk(
         handle_error("Failed to get ARS stored response for ARA", error)
         return
 
-    try:
-        if ConfirmPrompt(
-            "Scan response logs for original response url?", default=False
-        ).execute():
-            response = check_logs(body)
-            if response is not None:
-                body = response
-    except httpx.HTTPError as error:
-        handle_error("Failed to get response from ARA", error)
-        return
+    print_ars_metadata(body)
+    payload = extract_response_payload(body)
 
-    handle_output(body, view_mode, save_mode, save_path)
+    handle_output(payload, view_mode, save_mode, save_path)

@@ -61,6 +61,7 @@ def should_output(
     output: object,
     output_type: Literal["view", "save"],
     mode: Literal["prompt", "skip", "every"],
+    subject: str = "response",
 ) -> bool:
     """Based on user view/output flags, determine if the current item should be output."""
     if output is None or mode == "skip":
@@ -70,7 +71,7 @@ def should_output(
         return True
     with redirect_stdout(stderr):  # Otherwise set to "prompt"
         return ConfirmPrompt(
-            message=f"{output_type.capitalize()} response body?", default=True
+            message=f"{output_type.capitalize()} {subject} body?", default=True
         ).execute()
 
 
@@ -79,6 +80,7 @@ def handle_output(
     view_mode: Literal["prompt", "skip", "every", "pipe"],
     save_mode: Literal["prompt", "skip", "every"],
     save_path: Path | None,
+    subject: str = "response",
 ) -> None:
     """Based on the given view/output modes, handle user appropriate interactions."""
     if output is None:
@@ -87,8 +89,8 @@ def handle_output(
         print(json.dumps(output) if isinstance(output, dict | list) else output)
         return
 
-    if should_output(output, "view", view_mode):
-        if isinstance(output, dict):
+    if should_output(output, "view", view_mode, subject):
+        if isinstance(output, dict | list):
             subprocess.run(
                 CONFIG.viewer,
                 input=json.dumps(output),
@@ -105,6 +107,7 @@ def handle_output(
         output,  # pyright: ignore[reportUnknownArgumentType]
         "save",
         save_mode,
+        subject,
     ):
         if not save_path:
             with redirect_stdout(stderr):
@@ -116,7 +119,7 @@ def handle_output(
                 )
         save_path.parent.mkdir(parents=True, exist_ok=True)
         with save_path.open("w", encoding="utf8") as file:
-            if isinstance(output, dict):
+            if isinstance(output, dict | list):
                 json.dump(output, file)
             else:
                 file.write(str(output))

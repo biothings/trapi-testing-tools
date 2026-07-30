@@ -1,3 +1,5 @@
+import importlib
+from collections.abc import Sized
 from contextlib import redirect_stdout
 from pathlib import Path
 from sys import stderr
@@ -7,7 +9,9 @@ import typer
 from InquirerPy.prompts.fuzzy import FuzzyPrompt
 from rich.console import Console
 
+import analysis as analysis_list
 import queries as query_list
+from analysis.base_analysis import Analysis, AnalysisClass, ParametrizedAnalysis
 from trapi_testing_tools.types import OutputModes
 from trapi_testing_tools.utils import ENVIRONMENT_MAPPING
 
@@ -92,7 +96,7 @@ def set_output_modes(
     save: Path | None,
     no_save: bool,
     pipe: bool,
-    queries: list[Path],
+    selection: Sized,
 ) -> OutputModes:
     """Set output modes based on given arguments."""
     view_mode = "prompt"
@@ -104,10 +108,79 @@ def set_output_modes(
     if no_save:
         save_mode = "skip"
     if pipe:
-        if len(queries) > 1:
-            console.print("Pipe mode only supported for single queries.")
+        if len(selection) > 1:
+            console.print("Pipe mode only supported for a single query/analysis.")
             raise typer.Exit(1)
         view_mode = "pipe"
         save_mode = "skip"
 
     return view_mode, save_mode
+
+
+def discover_analyses() -> dict[str, AnalysisClass]:
+    """Import every analysis module and collect the declared analyses by name."""
+    found = dict[str, AnalysisClass]()
+    base_dir = Path(analysis_list.__path__[0])
+    for path in base_dir.rglob("**/*.py"):
+        if path.stem in ("__init__", "base_analysis"):
+            continue
+        module_name = "analysis." + ".".join(
+            path.relative_to(base_dir).with_suffix("").parts
+        )
+        try:
+            module = importlib.import_module(module_name)
+        except Exception as error:
+            console.print(
+                f"WARNING: could not import {module_name}: {error!r}",
+                style="yellow",
+            )
+            continue
+        for attr in vars(module).values():
+            if (
+                isinstance(attr, type)
+                and issubclass(attr, Analysis | ParametrizedAnalysis)
+                and attr not in (Analysis, ParametrizedAnalysis)
+                and not getattr(attr, "__abstractmethods__", None)
+            ):
+                found[attr.__name__] = attr
+    return found
+
+
+def set_analyses(names: list[str] | None) -> tuple[list[AnalysisClass], bool]:
+    """Given the command arguments, ensure analyses are selected."""
+    available = discover_analyses()
+    used_interactive = False
+
+    if names is None:
+        label_to_name = dict[str, str]()
+        for name, cls in sorted(available.items()):
+            doc = (cls.__doc__ or "").strip().removesuffix(".")
+            label_to_name[f"{name}  —  {doc}" if doc else name] = name
+        with redirect_stdout(stderr):
+            selection: list[str] = FuzzyPrompt(
+                message="Select analyses...",
+                choices=list(label_to_name),
+                multiselect=True,
+                border=True,
+                instruction="(Type to filter, Tab to select, Enter to confirm)",
+                info=True,
+            ).execute()
+        if len(selection) == 0:
+            raise typer.Abort()
+        names = [label_to_name[label] for label in selection]
+        used_interactive = True
+
+    selected = list[AnalysisClass]()
+    for name in names:
+        cls = available.get(name) or next(
+            (c for n, c in available.items() if n.lower() == name.lower()), None
+        )
+        if cls is None:
+            console.print(
+                f"Unknown analysis: {name}. "
+                f"Available: {', '.join(sorted(available))}",
+                style="red",
+            )
+            raise typer.Exit(1)
+        selected.append(cls)
+    return selected, used_interactive
