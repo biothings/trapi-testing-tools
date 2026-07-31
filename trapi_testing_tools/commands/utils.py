@@ -37,7 +37,10 @@ def set_queries(queries: list[Path] | None) -> tuple[list[Path], bool]: ...
 def set_queries(
     queries: list[Path] | None, multi: bool = True
 ) -> tuple[list[Path], bool] | tuple[Path, bool]:
-    """Given the command arguments, ensure queries are selected."""
+    """Given the command arguments, ensure queries are selected.
+
+    Directory arguments are expanded recursively into the query files.
+    """
     used_interactive = False
     if queries is None:
         valid_files = [
@@ -63,6 +66,26 @@ def set_queries(
             for path_str in (selection if type(selection) is list else [selection])
         ]
         used_interactive = True
+
+    # Recursively obtain queries from directory args
+    expanded: list[Path] = []
+    for path in queries:
+        if path.is_dir():
+            matches = sorted(
+                p.resolve() for p in path.rglob("*.py") if "__pycache__" not in p.parts
+            )
+            if not matches:
+                console.print(
+                    f"INFO: no query files found in {path}",
+                    style="italic bright_black",
+                )
+            expanded.extend(matches)
+        else:
+            expanded.append(path)
+    queries = expanded
+
+    if len(queries) == 0:
+        raise typer.Abort()
 
     if (type(queries) is list) and not multi:
         return queries[0], used_interactive

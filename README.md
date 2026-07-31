@@ -46,7 +46,8 @@ tt test -a -d -e bte.local
 You can run the command `tt test` with no other arguments to interactively select tests. If you know the test(s) you want to run, you can provide them as arguments:
 
 ```bash
-tt test trapi-testing-tools/queries/routine/feature/creative/drug_treats_disease.hurl
+tt test queries/routine/feature/creative/drug_treats_disease.py  # Specific file
+tt test queries/routine/feature/creative  # Set of files (recursively) under a folder
 ```
 
 ### Retrieving a response from an ARS PK
