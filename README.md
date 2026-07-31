@@ -59,6 +59,27 @@ tt pk <your-pk-here>
 
 For more information, see `tt pk --help`
 
+### Analyzing a response
+
+`tt analyze` runs one or more analyses against a TRAPI response. Select a response from a file with `-f`, or pipe one in:
+
+```bash
+# interactively pick analyses to run against a saved response
+tt analyze -f response.json
+
+# run specific analyses
+tt analyze -f response.json NodeFrequency SupportGraphHierarchy
+
+# pipe in a response and pipe out result
+tt test queries/my_query.py -e retriever.ci -p | tt analyze NodeFrequency -p | jq
+```
+
+Some analyses take arguments, passed after a `--` separator. You can view analysis options with `-- --help`.
+
+```bash
+tt analyze PathCount -f response.json -- --start NCBIGene:3778 --end MONDO:0000437
+```
+
 ## Writing a query
 
 You can add your own queries to be used in `tt test`, the specification is relatively simple:
@@ -75,11 +96,106 @@ body = {...}  # You can optionally add a body in the form of a dictionary
 tests = [http.status(200)]  # You can optionally set tests to validate the response
 ```
 
-Queries placed under the `trapi_testing_tools/queries/routine` directory will be run when `tt test` is invoked with the option `--all`
+The `body` may be a plain dict (as above) or a [translator_tom](https://github.com/NCATSTranslator/TRAPIObjectModeling) (TOM) model.
+
+Queries placed under the `queries/routine` directory will be run when `tt test` is invoked with the option `--all`
 
 ### Multi-query tests
 
-you can instead supply a list named `steps` with the above values as dictionary entries if you need to test consecutive related queries. See [`trapi_testing_tools/queries/routine/feature/caching/cache.py`](https://github.com/biothings/bte-hurl/blob/main/trapi_testing_tools/queries/routine/feature/caching/cache.py) for a good example.
+You can instead supply a list named `steps` of `Query` objects. The steps run in order against the same environment:
+
+
+```python
+from tests import http
+from trapi_testing_tools.types import Query
+from copy import deepcopy
+
+body1 = {...}  # A query body
+body2 = {...} # Another body, can modify a copy of previous
+
+steps = [
+    Query(method="POST", endpoint="/query", body=body1, tests=[http.status(200)]),
+    Query(method="POST", endpoint="/query", body=body2, tests=[http.status(200)]),
+]
+```
+
+## Writing a test
+
+Queries use tests, kept in `tests/` to make repeatable checks on query responses. Tests can signal a pass/fail, and/or provide arbitrary information as output to the terminal. An example:
+
+```python
+from typing import override
+
+import httpx
+
+from tests import trapi
+from tests.base_test import Test, TestResult
+
+
+class HasResults(Test):
+    """message has results."""  # docstring used for display in terminal
+
+    @override
+    @staticmethod
+    def test(response: httpx.Response) -> TestResult:
+        model = trapi.parse_or_fail(response)  # Converts to TOM model
+        if isinstance(model, TestResult):
+            return model  # not valid TRAPI, fail with the parse error
+        results = model.message.results_list
+        # TestResult is a tuple of boolean pass/fail, and string info
+        return TestResult(len(results) > 0, f"{len(results)} results")
+```
+
+There's a premade test collection of standard desireable tests called `standard_battery()` in `tests/battery.py`. Use that file for adding other commonly-reused sets.
+
+```python
+from tests.battery import standard_battery
+# standard_battery() returns a list which you can concat with custom tests.
+tests = standard_battery()
+```
+
+## Writing an analysis
+
+Analyses written under `analysis/` are discovered automatically. An analysis transforms a parsed TRAPI `Response` into JSON-serializable output, with the docstring being used as a display name.
+
+
+```python
+import typer
+
+from translator_tom import Response
+
+from analysis.base_analysis import Analysis, ParametrizedAnalysis, AnalysisOutput
+
+
+##### A simple analysis #####
+class ResponseShape(Analysis):
+    """node frequency across kg edges."""
+
+    @staticmethod
+    def analyze(response: Response) -> AnalysisOutput:
+        kg = response.message.knowledge_graph
+        return {
+            "nodes": len(kg.nodes_dict),
+            "edges": len(kg.edges_dict),
+            "results": len(response.message.results_list
+        }
+
+
+##### An analysis that takes arguments #####
+# Arguments may be passed in with the main analyze command after a ` -- `
+app = typer.Typer(add_completion=False)
+
+@app.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
+def run(ctx: typer.Context, some_arg: str | None = None) -> dict:
+    response = ctx.obj
+    return {...}
+
+
+class MyAnalysis(ParametrizedAnalysis):
+    """my parametrized analysis."""
+
+    app = app
+```
 
 ## Adding services to test
 
