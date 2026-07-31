@@ -11,7 +11,6 @@ from InquirerPy.prompts.confirm import ConfirmPrompt
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
-from rich.pretty import Pretty
 from rich.text import Text
 
 import trapi_testing_tools
@@ -262,8 +261,13 @@ def run_tests(query: Query, response: httpx.Response) -> tuple[int, int]:
                 if isinstance(result.info, str) and "\n" not in result.info:
                     message += f" ({result.info})"
                 else:
+                    details = (
+                        result.info
+                        if isinstance(result.info, str)
+                        else "\n".join(result.info)
+                    )
                     report_long = Panel(
-                        Pretty(result.info),
+                        Text(details),
                         title="details",
                         title_align="left",
                         expand=False,

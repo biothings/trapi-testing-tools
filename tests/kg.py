@@ -216,7 +216,7 @@ class AllKGItemsBound(Test):
 
 
 class BindingsResolveToKG(Test):
-    """all bound items exist in kg."""
+    """kg has all bound items."""
 
     @override
     @staticmethod

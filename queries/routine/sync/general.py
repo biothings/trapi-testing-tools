@@ -1,4 +1,3 @@
-
 from tests.battery import standard_battery
 
 method = "POST"

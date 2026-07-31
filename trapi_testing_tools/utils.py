@@ -1,11 +1,11 @@
 import asyncio
-from http import HTTPStatus
 import json
 import shutil
 import subprocess
 import zipfile
 from contextlib import redirect_stdout
 from dataclasses import replace
+from http import HTTPStatus
 from pathlib import Path
 from sys import stderr
 from types import CoroutineType, ModuleType
@@ -136,9 +136,7 @@ def serialize_body(body: object) -> dict[str, Any] | list[Any] | None:
     if isinstance(body, TOMBase):
         return body.to_dict()
 
-    raise AttributeError(
-        "Query body must be a dict, list, TOM model, or None."
-    )
+    raise AttributeError("Query body must be a dict, list, TOM model, or None.")
 
 
 def parse_query(query_module: ModuleType) -> list[Query]:
