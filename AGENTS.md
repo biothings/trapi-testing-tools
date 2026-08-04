@@ -44,7 +44,7 @@ There is **no pytest / unit-test suite.** The word "test" here means something e
 
 **Async queries.** `run_query` (`run_query.py`) detects `asyncquery` endpoints, polls `asyncquery_status` every 10s until done/timeout (`CONFIG.timeout`, default 300s), then GETs the final `response_url`.
 
-**PK retrieval.** `tt pk` (`retrieve_by_pk.py`) fans out concurrently across all ARS instances to locate the PK, fetches the trace, prompts to pick an ARA child actor, and retrieves that ARA's stored TRAPI response.
+**PK retrieval.** `tt pk` (`retrieve_by_pk.py`) fans out concurrently across all ARS instances to locate the PK, fetches the trace, prompts to pick an ARA child actor, and retrieves that ARA's stored TRAPI response. Metadata prints alongside the payload include a per-actor **merge count**, tallied by agent from the trace's `merged_versions_list` (a `repr`'d list parsed with `ast.literal_eval`, since a child's own copy is empty). `--trace/-t` skips the drill-down and outputs the whole trace with its per-actor metadata table; `--raw/-r` keeps the drill-down but skips `extract_response_payload`, emitting the raw ARS stored response instead of the TRAPI payload (`-t` takes precedence).
 
 **translator_tom (TOM).** Query bodies may be raw dicts or TOM model objects (`serialize_body` normalizes them); analyses receive a parsed `translator_tom.Response`. TOM is imported lazily so raw-dict query authoring never loads it.
 

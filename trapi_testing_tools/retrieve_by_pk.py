@@ -1,4 +1,6 @@
+import ast
 import asyncio
+from collections import Counter
 from contextlib import redirect_stdout
 from http import HTTPStatus
 from pathlib import Path
@@ -69,8 +71,12 @@ def get_ars_trace(pk: str) -> tuple[str, dict[str, Any]]:
 
 def get_ars_ara_response(
     target_ars: str, trace: dict[str, Any], ara: str | None
-) -> dict[str, Any]:
-    """Select an ARA-specific response from the ARS trace and retrieve it."""
+) -> tuple[dict[str, Any], str]:
+    """Select an ARA-specific response from the ARS trace and retrieve it.
+
+    Returns the stored response body along with the selected actor's full agent
+    name (e.g. `ara-shepherd-bte`) for cross-referencing the merge history.
+    """
     actor: dict[str, Any]
     actors = [
         child["actor"]["agent"].removeprefix("ara-")
@@ -103,7 +109,34 @@ def get_ars_ara_response(
         response = httpx.get(f"{target_ars}/{actor['message']}")
     response.raise_for_status()
     console.print(f"Got ARS stored response for {selection}")
-    return response.json()
+    return response.json(), actor["actor"]["agent"]
+
+
+def _merge_steps(container: dict[str, Any]) -> list[tuple[str, str]]:
+    """Parse a stringified `merged_versions_list` into (merged_pk, agent) pairs.
+
+    The ARS stores this as a `repr`'d Python list (single-quoted), so it is read
+    with `ast.literal_eval` rather than `json`.
+    """
+    raw = container.get("merged_versions_list")
+    if not raw:
+        return []
+    steps = raw
+    if isinstance(raw, str):
+        try:
+            steps = ast.literal_eval(raw)
+        except (ValueError, SyntaxError):
+            return []
+    return [
+        (str(step[0]), str(step[1]))
+        for step in steps
+        if isinstance(step, list | tuple) and len(step) >= 2  # noqa:PLR2004
+    ]
+
+
+def _merge_counts(container: dict[str, Any]) -> Counter[str]:
+    """Tally merge steps per agent from a `merged_versions_list`."""
+    return Counter(agent for _pk, agent in _merge_steps(container))
 
 
 def _status_style(status: str | None) -> str:
@@ -116,8 +149,12 @@ def _status_style(status: str | None) -> str:
     return "yellow"
 
 
-def print_ars_metadata(body: dict[str, Any]) -> None:
-    """Print key ARS metadata from a raw ARS stored response to the terminal."""
+def print_ars_metadata(body: dict[str, Any], merge_count: int | None = None) -> None:
+    """Print key ARS metadata from a raw ARS stored response to the terminal.
+
+    `merge_count` is the number of times this ARA was merged into the parent PK,
+    derived from the parent trace since a child response omits its own history.
+    """
     fields: dict[str, Any] = body.get("fields", {})
     data: dict[str, Any] = fields.get("data", {})
     message: dict[str, Any] = data.get("message") or {}
@@ -166,10 +203,73 @@ def print_ars_metadata(body: dict[str, Any]) -> None:
         f"{data.get('schema_version') or '—'} / {data.get('biolink_version') or '—'}",
     )
     table.add_row("Merged Version", str(fields.get("merged_version") or "—"))
+    if merge_count is None:
+        merge_count = sum(_merge_counts(fields).values())
+    table.add_row("Merges", str(merge_count))
     table.add_row("Timestamp", str(fields.get("timestamp") or "—"))
     table.add_row("Updated At", str(fields.get("updated_at") or "—"))
 
     console.print(table)
+
+
+def print_trace_metadata(trace: dict[str, Any]) -> None:
+    """Print key ARS metadata from a raw ARS trace to the terminal."""
+    children: list[dict[str, Any]] = trace.get("children") or []
+    status = trace.get("status")
+    merge_counts = _merge_counts(trace)
+
+    table = Table(
+        title="ARS Trace Metadata",
+        title_style="bold",
+        box=box.SIMPLE,
+        show_header=False,
+    )
+    table.add_column("Field", style="rule.line", justify="right")
+    table.add_column("Value", overflow="fold")
+
+    table.add_row("PK", str(trace.get("pk") or trace.get("message") or "—"))
+    table.add_row(
+        "Status",
+        f"[{_status_style(status)}]{status or '—'}[/]",
+    )
+    table.add_row("Actors", str(len(children)))
+    table.add_row("Merges", str(sum(merge_counts.values())))
+    table.add_row("Merged Version", str(trace.get("merged_version") or "—"))
+
+    console.print(table)
+
+    if not children:
+        return
+
+    actor_table = Table(
+        title="Actors",
+        title_style="bold",
+        box=box.SIMPLE,
+    )
+    actor_table.add_column("Actor", overflow="fold")
+    actor_table.add_column("Status")
+    actor_table.add_column("Code", justify="right")
+    actor_table.add_column("Results", justify="right")
+    actor_table.add_column("Merges", justify="right")
+
+    for child in children:
+        actor = child.get("actor") or {}
+        child_status = child.get("status")
+        agent_full = str(actor.get("agent") or "")
+        agent = agent_full.removeprefix("ara-").removeprefix("kp-") or "—"
+        actor_table.add_row(
+            agent,
+            f"[{_status_style(child_status)}]{child_status or '—'}[/]",
+            str(child.get("code") if child.get("code") is not None else "—"),
+            str(
+                child.get("result_count")
+                if child.get("result_count") is not None
+                else "—"
+            ),
+            str(merge_counts.get(agent_full, 0)),
+        )
+
+    console.print(actor_table)
 
 
 def extract_response_payload(body: dict[str, Any]) -> dict[str, Any]:
@@ -188,31 +288,39 @@ def handle_error(msg: str, error: Exception) -> None:
             console.print_exception(show_locals=True)
 
 
-def get_response_from_pk(
+def get_response_from_pk(  # noqa:PLR0913
     pk: str,
     ara: str | None,
     view_mode: Literal["prompt", "skip", "every", "pipe"],
     save_mode: Literal["prompt", "skip", "every"],
     save_path: Path | None,
+    trace: bool = False,
+    raw: bool = False,
 ) -> None:
     """Drill down into ARS PK to get a response of interest."""
     target_url: str
-    body: dict[str, Any]
+    trace_body: dict[str, Any]
     try:
-        target_url, body = get_ars_trace(pk)
+        target_url, trace_body = get_ars_trace(pk)
         if target_url == "":
             return
     except httpx.HTTPError as error:
         handle_error("Failed to get ARS trace for pk", error)
         return
 
+    if trace:
+        print_trace_metadata(trace_body)
+        handle_output(trace_body, view_mode, save_mode, save_path, subject="trace")
+        return
+
     try:
-        body = get_ars_ara_response(target_url, body, ara)
+        body, selected_agent = get_ars_ara_response(target_url, trace_body, ara)
     except httpx.HTTPError as error:
         handle_error("Failed to get ARS stored response for ARA", error)
         return
 
-    print_ars_metadata(body)
-    payload = extract_response_payload(body)
+    merge_count = _merge_counts(trace_body).get(selected_agent, 0)
+    print_ars_metadata(body, merge_count)
+    payload = body if raw else extract_response_payload(body)
 
     handle_output(payload, view_mode, save_mode, save_path)

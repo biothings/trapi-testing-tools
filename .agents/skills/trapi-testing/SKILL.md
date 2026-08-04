@@ -77,6 +77,8 @@ tt test queries/my_query.py -e retriever.ci -p | tt analyze NodeFrequency -p | j
 **Other commands:**
 ```bash
 tt pk <PK> [--ara <name>]     # drill an ARS PK down to one ARA's stored response
+tt pk <PK> --trace/-t         # skip the drill-down; show the overall ARS trace + per-actor metadata (incl. merge counts)
+tt pk <PK> --raw/-r           # after picking a child, skip TRAPI extraction; emit the raw ARS stored response
 tt ping [app] [--all]         # check service instances are responsive
 tt curl <query> -e <env>      # print the query as a curl command
 ```

@@ -52,7 +52,23 @@ def pk(  # noqa:PLR0913
         typer.Option(
             "--pipe",
             "-p",
-            help="Instead of viewing, output response directly to stdout for piping",
+            help="Instead of viewing, output response directly to stdout for piping.",
+        ),
+    ] = False,
+    trace: Annotated[
+        bool,
+        typer.Option(
+            "--trace",
+            "-t",
+            help="Present the overall ARS trace.",
+        ),
+    ] = False,
+    raw: Annotated[
+        bool,
+        typer.Option(
+            "--raw",
+            "-r",
+            help="Skip TRAPI response extraction and show full ARS info.",
         ),
     ] = False,
 ) -> None:
@@ -74,5 +90,7 @@ def pk(  # noqa:PLR0913
         view_mode,
         save_mode,
         save,
+        trace,
+        raw,
     )
     pass
