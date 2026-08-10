@@ -56,7 +56,9 @@ tt test queries/routine/sync/general.py -e retriever.ci
 tt test                             # no args → interactively pick query file(s) + environment
 ```
 `-a/--all` runs everything under `queries/routine/**`. `-d/--debug` pauses on
-failing queries to view/save. `-e` sets the environment (see below).
+failing queries to view/save (and, when piping, keeps responses only for
+failures). `-e` sets the environment (see below). `tt test` exits non-zero if
+any query or test fails.
 
 **Run analyses** (`tt analyze`) — input from `-f file` or piped stdin:
 ```bash
@@ -69,10 +71,15 @@ tt analyze PathCount -- --help                    # help for a parametrized anal
 Args after a literal `--` are forwarded to a parametrized analysis. When piping
 input you **must** name analyses (interactive selection needs `-f`).
 
-**Pipe between commands** (`-p/--pipe` emits JSON to stdout; single item only):
+**Pipe between commands** (`-p/--pipe` emits JSON to stdout):
 ```bash
 tt test queries/my_query.py -e retriever.ci -p | tt analyze NodeFrequency -p | jq
 ```
+For `tt test`, a lone single-step query pipes its **bare response** (so it chains
+into `tt analyze`); multiple queries or a multi-step query instead emit one
+`RunReport` envelope (per-query/step status, tests, timing, responses).
+`-r/--report` implies `-p` and drops response bodies (run/test info only); `-d`
+with `-p` keeps only failing responses.
 
 **Other commands:**
 ```bash
@@ -83,14 +90,16 @@ tt ping [app] [--all]         # check service instances are responsive
 tt curl <query> -e <env>      # print the query as a curl command
 ```
 Output flags shared across commands: `-v/--view` / `-V/--no-view` (view opens
-`CONFIG.viewer`, default `fx`), `-s/--save <path>` / `-S/--no-save`, `-p/--pipe`.
+`CONFIG.viewer`, default `fx`), `-s/--save <path>` / `-S/--no-save`, `-p/--pipe`
+(plus `-r/--report` on `tt test`, which implies `-p` and omits response bodies).
 
 **Automated / non-interactive use: always pass explicit output flags.** When
 view/save flags are omitted they default to `prompt`, and the command blocks on
 interactive "View response body?" / "Save response body?" confirmations that
 stall a non-interactive session. Pass `-p` to pipe JSON to stdout, `-s <path>
--V` to save without viewing, or `-V -S` to suppress both output paths. (For the
-same reason, always supply query/analysis file arguments and `-e <env>`
+-V` to save without viewing, or `-V -S` to suppress both output paths. Without a
+TTY these prompts auto-skip to no-view/no-save, but explicit flags are clearer.
+(For the same reason, always supply query/analysis file arguments and `-e <env>`
 explicitly so the fuzzy selection prompts never open.)
 
 ## Environments

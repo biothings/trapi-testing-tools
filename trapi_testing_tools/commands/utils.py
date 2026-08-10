@@ -13,7 +13,7 @@ import analysis as analysis_list
 import queries as query_list
 from analysis.base_analysis import Analysis, AnalysisClass, ParametrizedAnalysis
 from trapi_testing_tools.types import OutputModes
-from trapi_testing_tools.utils import ENVIRONMENT_MAPPING
+from trapi_testing_tools.utils import ENVIRONMENT_MAPPING, is_interactive
 
 console = Console(stderr=True)
 
@@ -114,16 +114,24 @@ def set_environment(environment: str | None) -> tuple[str, bool]:
     return environment, used_interactive
 
 
-def set_output_modes(
+def set_output_modes(  # noqa: PLR0913
     view: bool | None,
     save: Path | None,
     no_save: bool,
     pipe: bool,
     selection: Sized,
+    allow_multi: bool = False,
 ) -> OutputModes:
-    """Set output modes based on given arguments."""
-    view_mode = "prompt"
-    save_mode = "prompt"
+    """Set output modes based on given arguments.
+
+    Without an interactive terminal the view/save prompts can't be answered, so
+    anything left unspecified defaults to skipping (no-view/no-save). ``allow_multi``
+    permits ``--pipe`` across multiple items (the test command aggregates them into
+    one report); other commands still reject piping more than one.
+    """
+    default_mode = "prompt" if is_interactive() else "skip"
+    view_mode = default_mode
+    save_mode = default_mode
     if view is not None:
         view_mode = "every" if view else "skip"
     if save is not None:
@@ -131,7 +139,7 @@ def set_output_modes(
     if no_save:
         save_mode = "skip"
     if pipe:
-        if len(selection) > 1:
+        if not allow_multi and len(selection) > 1:
             console.print("Pipe mode only supported for a single query/analysis.")
             raise typer.Exit(1)
         view_mode = "pipe"

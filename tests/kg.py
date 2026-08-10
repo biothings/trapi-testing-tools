@@ -7,34 +7,43 @@ from translator_tom.models.shared import CURIE, AuxGraphID, EdgeID
 
 from tests import trapi
 from tests.base_test import Test, TestResult
+from tests.params import Comparison, CountTest, count_result
 
 
-class NodeCount(Test):
+class NodeCount(CountTest):
     """kg has nodes."""
 
+    subject = "kg nodes"
+
     @override
     @staticmethod
-    def test(response: httpx.Response) -> TestResult:
+    def test(
+        response: httpx.Response, *, expected: int = 0, comparison: Comparison = "gt"
+    ) -> TestResult:
         model = trapi.parse_or_fail(response)
         if isinstance(model, TestResult):
             return model
         kg = model.message.knowledge_graph
-        node_count = len(kg.nodes) if kg else 0
-        return TestResult(node_count > 0, f"{node_count} nodes")
+        count = len(kg.nodes) if kg else 0
+        return count_result(NodeCount.subject, count, expected, comparison)
 
 
-class EdgeCount(Test):
+class EdgeCount(CountTest):
     """kg has edges."""
 
+    subject = "kg edges"
+
     @override
     @staticmethod
-    def test(response: httpx.Response) -> TestResult:
+    def test(
+        response: httpx.Response, *, expected: int = 0, comparison: Comparison = "gt"
+    ) -> TestResult:
         model = trapi.parse_or_fail(response)
         if isinstance(model, TestResult):
             return model
         kg = model.message.knowledge_graph
-        edge_count = len(kg.edges) if kg else 0
-        return TestResult(edge_count > 0, f"{edge_count} edges")
+        count = len(kg.edges) if kg else 0
+        return count_result(EdgeCount.subject, count, expected, comparison)
 
 
 class SourceRecordURLs(Test):

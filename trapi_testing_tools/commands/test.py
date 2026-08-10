@@ -21,14 +21,12 @@ app = typer.Typer(
     context_settings=dict(help_option_names=["-h", "--help"]),
 )
 
-# TODO: --analyze to auto-pass to analysis (and/or support analysis in the test definition)
-# TODO: --validate to auto-pass to validation
-
 
 @app.command("test | t", help="Run a query.")
 def test(  # noqa: PLR0913
     queries: Annotated[
-        list[Path] | None, typer.Argument(help="One or more query files to run")
+        list[Path] | None,
+        typer.Argument(help="One or more query files or folders (recursive) to run."),
     ] = None,
     environment: Annotated[
         str | None,
@@ -50,7 +48,7 @@ def test(  # noqa: PLR0913
         typer.Option(
             "--debug",
             "-d",
-            help="Stop to view/save failing queries.",
+            help="Only surface failing queries: stop to view/save them, or (when piping) keep only their responses.",
         ),
     ] = False,
     view: Annotated[
@@ -86,6 +84,14 @@ def test(  # noqa: PLR0913
             help="Instead of viewing, output response directly to stdout for piping",
         ),
     ] = False,
+    report: Annotated[
+        bool,
+        typer.Option(
+            "--report",
+            "-r",
+            help="Implies --pipe; emit the run/test report with no response bodies.",
+        ),
+    ] = False,
 ) -> None:
     """Run one or more queries against a specified environment."""
     # cache_tests()
@@ -95,7 +101,9 @@ def test(  # noqa: PLR0913
         queries = list(Path(query_list.__path__[0]).rglob("routine/**/*.py"))
     queries, used_interactive = set_queries(queries)
     environment, used_interactive = set_environment(environment)
-    output_modes = set_output_modes(view, save, no_save, pipe, queries)
+    output_modes = set_output_modes(
+        view, save, no_save, pipe or report, queries, allow_multi=True
+    )
 
     # Ouptut hint to repeat quicker
     if used_interactive:
@@ -112,6 +120,8 @@ def test(  # noqa: PLR0913
             opts.append("-S")
         if pipe:
             opts.append("-p")
+        if report:
+            opts.append("-r")
         console.print(
             f"\\[Hint] Re-run this command more quickly using: tt test {' '.join(opts)} {' '.join(str(q.relative_to(Path.cwd())) for q in queries)}",
             style="italic bright_black",
@@ -119,10 +129,15 @@ def test(  # noqa: PLR0913
             highlight=False,
         )
 
-    run_queries(
+    passed = run_queries(
         queries,
         ENVIRONMENT_MAPPING[environment],
         output_modes,
+        environment,
         save,
         debug,
+        report,
     )
+
+    if not passed:
+        raise typer.Exit(1)

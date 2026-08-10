@@ -7,7 +7,7 @@ from contextlib import redirect_stdout
 from dataclasses import replace
 from http import HTTPStatus
 from pathlib import Path
-from sys import stderr
+from sys import stderr, stdin
 from types import CoroutineType, ModuleType
 from typing import Any, Literal, cast, get_args, override
 
@@ -40,6 +40,25 @@ for env, levels in CONFIG.environments.items():
 
 for level, url in CONFIG.environments[CONFIG.default_environment].items():
     ENVIRONMENT_MAPPING[level] = url
+
+
+def is_interactive() -> bool:
+    """Whether an interactive terminal is attached for prompting."""
+    return stdin.isatty() and stderr.isatty()
+
+
+def maybe_print_traceback(
+    message: str = "Print traceback for this error?",
+) -> None:
+    """Offer to print the current exception's traceback.
+
+    Skips prompt/output if no TTY is available.
+    """
+    if not is_interactive():
+        return
+    with redirect_stdout(stderr):
+        if ConfirmPrompt(message, default=False).execute():
+            console.print_exception(show_locals=True)
 
 
 class IndentedBlock(RenderHook):
