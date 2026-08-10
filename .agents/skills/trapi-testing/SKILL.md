@@ -151,6 +151,13 @@ steps = [
 serialized automatically. Endpoints containing `asyncquery` are auto-polled to
 completion.
 
+For TOM-model bodies, `trapi_testing_tools/query_utils.py` has convenience
+constructors: `one_hop(...)` builds a two-node/one-edge query from
+category/id/predicate args; `from_qg(query_graph, ...)` wraps an existing
+`QueryGraph`/`PathfinderQueryGraph`; and `load_json(path, model)` loads a JSON
+file as a given TOM model (a bare query graph, a `Message`, or a full `Query`)
+and reconstructs a full query body.
+
 ## Authoring an analysis
 
 Drop a `.py` file under `analysis/`. The **class docstring is the display name**

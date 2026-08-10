@@ -1,10 +1,12 @@
 """Convenience constructors for building TRAPI query bodies with translator_tom."""
 
+from pathlib import Path
 from typing import Any
 
 from translator_tom import (
     Biolink,
     Message,
+    PathfinderQueryGraph,
     QEdge,
     QNode,
     Qualifier,
@@ -45,6 +47,28 @@ def _qualifier_constraints(
             ]
         )
     ]
+
+
+def from_qg(
+    query_graph: QueryGraph | PathfinderQueryGraph,
+    *,
+    submitter: str | None = "trapi-testing-tools",
+    **body: Any,
+) -> Query:
+    """Wrap an existing query graph in a `Message` and `Query` to form a query body.
+
+    Args:
+        query_graph: The `QueryGraph` (or `PathfinderQueryGraph`) to wrap.
+        submitter: Value for the body-level `submitter` field; pass `None` to omit.
+        **body: Additional body-level fields passed through to `Query` (e.g.
+            `parameters={"tier": 0}`, `bypass_cache=True`, `log_level="INFO"`).
+
+    Returns:
+        A `translator_tom.Query` suitable for assigning to a query file's `body`.
+    """
+    if submitter is not None:
+        body["submitter"] = submitter
+    return Query(message=Message(query_graph=query_graph), **body)
 
 
 def one_hop(  # noqa: PLR0913
@@ -96,6 +120,49 @@ def one_hop(  # noqa: PLR0913
         },
         edges={"e01": edge},
     )
-    if submitter is not None:
-        body["submitter"] = submitter
-    return Query(message=Message(query_graph=graph), **body)
+    return from_qg(graph, submitter=submitter, **body)
+
+
+def load_json(
+    path: str | Path,
+    model: type[QueryGraph | PathfinderQueryGraph | Message | Query],
+    *,
+    submitter: str | None = "trapi-testing-tools",
+    **body: Any,
+) -> Query:
+    """Load JSON from `path` as the given TOM `model` and reconstruct a query body.
+
+    Deliberately handles only the common, unambiguous shapes:
+
+    - a bare query graph (`QueryGraph` / `PathfinderQueryGraph`) is wrapped via
+      `from_qg`;
+    - a `Message` is wrapped in a `Query`;
+    - a full `Query` is returned as-is.
+
+    Anything else raises `TypeError`.
+
+    Args:
+        path: Path to a JSON file.
+        model: The TOM model class the JSON is validated against.
+        submitter: Value for the body-level `submitter` field, applied only when a
+            `Query` is constructed here (query-graph and `Message` inputs); pass
+            `None` to omit. Ignored when the JSON already is a full `Query`.
+        **body: Additional body-level fields passed through to the constructed
+            `Query`. Ignored when the JSON already is a full `Query`.
+
+    Returns:
+        A `translator_tom.Query` suitable for assigning to a query file's `body`.
+    """
+    loaded = model.from_json(Path(path).read_bytes())
+    if isinstance(loaded, Query):
+        return loaded
+    if isinstance(loaded, Message):
+        if submitter is not None:
+            body["submitter"] = submitter
+        return Query(message=loaded, **body)
+    if isinstance(loaded, QueryGraph | PathfinderQueryGraph):
+        return from_qg(loaded, submitter=submitter, **body)
+    raise TypeError(
+        f"Cannot reconstruct a query body from {type(loaded).__name__}; "
+        "expected a QueryGraph, PathfinderQueryGraph, Message, or Query."
+    )

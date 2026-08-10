@@ -48,6 +48,8 @@ There is **no pytest / unit-test suite.** The word "test" here means something e
 
 **translator_tom (TOM).** Query bodies may be raw dicts or TOM model objects (`serialize_body` normalizes them); analyses receive a parsed `translator_tom.Response`. TOM is imported lazily so raw-dict query authoring never loads it.
 
+**Query-body constructors.** `trapi_testing_tools/query_utils.py` provides convenience builders for TOM query bodies: `one_hop` (a two-node/one-edge query from category/id/predicate args), `from_qg` (wrap an existing `QueryGraph`/`PathfinderQueryGraph` in a `Message`+`Query`), and `load_json` (load a JSON file as a given TOM model — a bare query graph, a `Message`, or a full `Query` — and reconstruct a complete query body). All apply a default `submitter` and pass extra keyword args through as body-level fields.
+
 ## Conventions
 
 - Ruff is configured broadly (pydocstyle google convention, type-annotation rules, pathlib-over-os, etc.) with line length 88. Docstrings are required on public functions/classes.
