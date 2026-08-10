@@ -40,25 +40,25 @@ CLIENT = httpx.Client(
 
 def run_queries(  # noqa: PLR0913
     files: list[Path],
-    url: str,
+    targets: list[tuple[str, str]],
     output_modes: OutputModes,
-    env: str,
     save_path: Path | None = None,
     on_fail: bool = False,
     report_only: bool = False,
 ) -> bool:
-    """Given a set of queries, run each.
+    """Given a set of queries, run each against each target environment.
 
-    Returns ``True`` only if every query ran and passed. When piping, a single
-    `RunReport` JSON envelope aggregating every query/step is written to
-    stdout.
+    ``targets`` is a list of ``(env_name, url)`` pairs; every query runs against
+    every target, sequentially. Returns ``True`` only if every run passed. When
+    piping, a single `RunReport` JSON envelope aggregating every query/step is
+    written to stdout.
     """
     collect = output_modes[0] == "pipe"  # only collect responses on pipe (save mem)
     report_queries: list[QueryResult] = []
     run_start = time.monotonic()
 
     all_passed = True
-    multiple = len(files) > 1
+    multiple = len(files) > 1 or len(targets) > 1
     for path in files:
         file = path.resolve().relative_to(Path(trapi_testing_tools.__path__[0]).parent)
         if file.suffix != ".py":
@@ -71,7 +71,10 @@ def run_queries(  # noqa: PLR0913
             console.print(f"ERROR: {file} does not exist. Skipping...", style="red")
             all_passed = False
             if collect:
-                report_queries.append(pre_run_failure(file, "file does not exist"))
+                report_queries.extend(
+                    pre_run_failure(file, env, "file does not exist")
+                    for env, _url in targets
+                )
             continue
         try:
             import_path = ".".join(file.with_suffix("").parts)
@@ -83,26 +86,38 @@ def run_queries(  # noqa: PLR0913
             maybe_print_traceback()
             all_passed = False
             if collect:
-                report_queries.append(pre_run_failure(file, repr(error)))
+                report_queries.extend(
+                    pre_run_failure(file, env, repr(error)) for env, _url in targets
+                )
             continue
-        query_save_path = save_path
-        if query_save_path is not None and multiple:
-            # Use query path to avoid name collisions
-            qualified = ".".join(file.with_suffix("").parts).removeprefix("queries.")
-            query_save_path = query_save_path.with_name(
-                f"{qualified}_{query_save_path.name}"
+
+        qualified = ".".join(file.with_suffix("").parts).removeprefix("queries.")
+        for env, url in targets:
+            query_save_path = save_path
+            if query_save_path is not None and multiple:
+                # Prefix by environment and/or query path so runs don't collide.
+                prefix = ".".join(
+                    ([env] if len(targets) > 1 else [])
+                    + ([qualified] if len(files) > 1 else [])
+                )
+                query_save_path = query_save_path.with_name(
+                    f"{prefix}_{query_save_path.name}"
+                )
+            passed, result = manage_query(
+                query, url, env, output_modes, query_save_path, on_fail, report_only
             )
-        passed, result = manage_query(
-            query, url, output_modes, query_save_path, on_fail, report_only
-        )
-        if not passed:
-            all_passed = False
-        if collect and result is not None:
-            report_queries.append(result)
+            if not passed:
+                all_passed = False
+            if collect and result is not None:
+                report_queries.append(result)
 
     if collect:
         emit_report(
-            report_queries, env, all_passed, time.monotonic() - run_start, report_only
+            report_queries,
+            [env for env, _url in targets],
+            all_passed,
+            time.monotonic() - run_start,
+            report_only,
         )
     return all_passed
 
@@ -110,6 +125,7 @@ def run_queries(  # noqa: PLR0913
 def manage_query(  # noqa: PLR0913
     query_module: ModuleType,
     url: str,
+    env: str,
     output_modes: OutputModes,
     save_path: Path | None,
     on_fail: bool,
@@ -126,7 +142,9 @@ def manage_query(  # noqa: PLR0913
         Path(trapi_testing_tools.__path__[0]).parent
     )
     # Use rich text to create a section for this query's context
-    console.rule(Text("┌ ", style="rule.line") + str(rel_path), align="left")
+    console.rule(
+        Text("┌ ", style="rule.line") + str(rel_path) + f"  ·  {env}", align="left"
+    )
     console.push_render_hook(IndentedBlock())
 
     queries = parse_query(query_module)
@@ -159,7 +177,7 @@ def manage_query(  # noqa: PLR0913
             console.print("└ No Response", style="rule.line")
             result = (
                 build_query_result(
-                    rel_path, steps, False, query_elapsed, len(queries) > 1
+                    rel_path, env, steps, False, query_elapsed, len(queries) > 1
                 )
                 if collect
                 else None
@@ -204,7 +222,7 @@ def manage_query(  # noqa: PLR0913
 
     result = (
         build_query_result(
-            rel_path, steps, query_passed, query_elapsed, len(queries) > 1
+            rel_path, env, steps, query_passed, query_elapsed, len(queries) > 1
         )
         if collect
         else None

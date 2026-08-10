@@ -29,12 +29,12 @@ def test(  # noqa: PLR0913
         typer.Argument(help="One or more query files or folders (recursive) to run."),
     ] = None,
     environment: Annotated[
-        str | None,
+        list[str] | None,
         typer.Option(
             "--environment",
             "--env",
             "-e",
-            help="Set the environment to use (e.g. bte.prod).",
+            help="Environment(s) to run against (e.g. retriever.dev). Multiple environments run queries against each.",
         ),
     ] = None,
     all_routine: Annotated[
@@ -93,7 +93,7 @@ def test(  # noqa: PLR0913
         ),
     ] = False,
 ) -> None:
-    """Run one or more queries against a specified environment."""
+    """Run one or more queries against one or more environments."""
     # cache_tests()
     used_interactive = False
 
@@ -107,7 +107,7 @@ def test(  # noqa: PLR0913
 
     # Ouptut hint to repeat quicker
     if used_interactive:
-        opts = [f"-e {environment}"]
+        opts = [f"-e {env}" for env in environment]
         if all_routine:
             opts.append("-a")
         if debug:
@@ -129,11 +129,11 @@ def test(  # noqa: PLR0913
             highlight=False,
         )
 
+    targets = [(env, ENVIRONMENT_MAPPING[env]) for env in environment]
     passed = run_queries(
         queries,
-        ENVIRONMENT_MAPPING[environment],
+        targets,
         output_modes,
-        environment,
         save,
         debug,
         report,

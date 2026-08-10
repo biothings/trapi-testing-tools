@@ -38,7 +38,10 @@ def curl(
 ) -> None:
     """Get a query in curl format."""
     query, _ = set_queries([query] if query else None, multi=False)
-    environment, _ = set_environment(environment)
+    environments, _ = set_environment(
+        [environment] if environment else None, multi=False
+    )
+    environment = environments[0]
 
     query = query.resolve().relative_to(Path(trapi_testing_tools.__path__[0]).parent)
 

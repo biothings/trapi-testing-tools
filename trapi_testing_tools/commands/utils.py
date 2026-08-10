@@ -92,22 +92,35 @@ def set_queries(
     return queries, used_interactive
 
 
-def set_environment(environment: str | None) -> tuple[str, bool]:
-    """Ensure a proper target environment has been selected."""
+def set_environment(
+    environment: list[str] | None, multi: bool = True
+) -> tuple[list[str], bool]:
+    """Ensure one or more target environments have been selected.
+
+    With ``multi`` (the default) the interactive picker is multiselect; multiple
+    environments run each query against each, sequentially.
+    """
     used_interactive = False
-    if environment is None:
+    if not environment:
         with redirect_stdout(stderr):
-            environment = FuzzyPrompt(
-                message="Select environment...",
+            selection = FuzzyPrompt(
+                message="Select environment(s)..."
+                if multi
+                else "Select environment...",
                 choices=[key for key in ENVIRONMENT_MAPPING if "." in key],
+                multiselect=multi,
                 instruction="(Type to filter, Tab to select, Enter to confirm)",
                 border=True,
             ).execute()
+        environment = selection if isinstance(selection, list) else [selection]
         used_interactive = True
 
-    if environment is None or environment not in ENVIRONMENT_MAPPING:
+    unknown = [env for env in environment if env not in ENVIRONMENT_MAPPING]
+    if not environment or unknown:
         console.print(
-            f"Environment must be one of {(', '.join(ENVIRONMENT_MAPPING.keys()))}"
+            f"Environment{'s' if len(unknown) > 1 else ''} "
+            f"{', '.join(unknown) or '(none)'} must be one of "
+            f"{', '.join(ENVIRONMENT_MAPPING.keys())}"
         )
         raise typer.Exit(1)
 

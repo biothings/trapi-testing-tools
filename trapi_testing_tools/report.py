@@ -41,10 +41,11 @@ class StepResult(TypedDict):
 
 
 class QueryResult(TypedDict):
-    """One query file's outcome; always a `steps` list (length 1 for a singleton)."""
+    """One query file run against one environment; a `steps` list (len 1 for a singleton)."""
 
     type: Literal["singleton", "multi_step"]
     path: str  # repo-relative query file path
+    env: str  # the environment this query ran against
     passed: bool  # every step passed
     error: str | None  # pre-run failure (import/parse/missing); else None
     elapsed_seconds: float
@@ -52,10 +53,14 @@ class QueryResult(TypedDict):
 
 
 class RunReport(TypedDict):
-    """The whole ``--pipe`` envelope for one ``tt test`` invocation."""
+    """The whole ``--pipe`` envelope for one ``tt test`` invocation.
 
-    env: str
-    query_count: int
+    A query run against multiple environments appears once per environment in
+    `queries` (each carrying its own `env`).
+    """
+
+    envs: list[str]  # environments run against, in order
+    query_count: int  # number of query results (files x environments)
     passed: bool  # every query passed
     elapsed_seconds: float
     queries: list[QueryResult]
@@ -116,8 +121,9 @@ def build_step(
     return step
 
 
-def build_query_result(
+def build_query_result(  # noqa: PLR0913
     path: Path,
+    env: str,
     steps: list[StepResult],
     passed: bool,
     elapsed: float,
@@ -127,6 +133,7 @@ def build_query_result(
     return {
         "type": "multi_step" if multi_step else "singleton",
         "path": str(path),
+        "env": env,
         "passed": passed,
         "error": None,
         "elapsed_seconds": round(elapsed, 3),
@@ -134,11 +141,12 @@ def build_query_result(
     }
 
 
-def pre_run_failure(file: Path, error: str) -> QueryResult:
+def pre_run_failure(file: Path, env: str, error: str) -> QueryResult:
     """A `QueryResult` for a file that couldn't be run (missing/import/parse)."""
     return {
         "type": "singleton",
         "path": str(file),
+        "env": env,
         "passed": False,
         "error": error,
         "elapsed_seconds": 0.0,
@@ -148,7 +156,7 @@ def pre_run_failure(file: Path, error: str) -> QueryResult:
 
 def emit_report(
     queries: list[QueryResult],
-    env: str,
+    envs: list[str],
     passed: bool,
     elapsed: float,
     report_only: bool,
@@ -175,7 +183,7 @@ def emit_report(
         return
 
     report: RunReport = {
-        "env": env,
+        "envs": envs,
         "query_count": len(queries),
         "passed": passed,
         "elapsed_seconds": round(elapsed, 3),

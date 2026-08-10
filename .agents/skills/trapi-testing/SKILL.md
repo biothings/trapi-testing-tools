@@ -53,12 +53,14 @@ payloads go to **stdout**, which is what makes the pipelines below work.
 ```bash
 tt test -a -d -e bte.local          # all routine queries, stop on failures, local bte
 tt test queries/routine/sync/general.py -e retriever.ci
-tt test                             # no args → interactively pick query file(s) + environment
+tt test queries/my_query.py -e bte.ci -e retriever.ci   # run against multiple environments
+tt test                             # no args → interactively pick query file(s) + environment(s)
 ```
 `-a/--all` runs everything under `queries/routine/**`. `-d/--debug` pauses on
 failing queries to view/save (and, when piping, keeps responses only for
-failures). `-e` sets the environment (see below). `tt test` exits non-zero if
-any query or test fails.
+failures). `-e` sets the environment(s) — repeatable (interactive picker is
+multiselect); with multiple, each query runs against each sequentially (see
+below). `tt test` exits non-zero if any query or test fails.
 
 **Run analyses** (`tt analyze`) — input from `-f file` or piped stdin:
 ```bash
@@ -79,7 +81,9 @@ For `tt test`, a lone single-step query pipes its **bare response** (so it chain
 into `tt analyze`); multiple queries or a multi-step query instead emit one
 `RunReport` envelope (per-query/step status, tests, timing, responses).
 `-r/--report` implies `-p` and drops response bodies (run/test info only); `-d`
-with `-p` keeps only failing responses.
+with `-p` keeps only failing responses. Multiple `-e` run every query against
+every environment; the envelope's top-level `envs` and each query's `env`
+identify which run is which.
 
 **Other commands:**
 ```bash
