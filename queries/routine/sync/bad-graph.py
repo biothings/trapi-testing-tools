@@ -39,5 +39,5 @@ body = {
     },
 }
 tests = [
-    http.status(422),
+    http.Status.expect(422),
 ]

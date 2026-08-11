@@ -43,4 +43,4 @@ class TRAPINotImplementedError(Test):
         return TestResult(passed, body["description"] if not passed else None)
 
 
-tests = [http.status(200), TRAPINotImplementedError]
+tests = [http.Status, TRAPINotImplementedError]

@@ -20,4 +20,4 @@ body = {
         }
     },
 }
-tests = [http.status(400)]
+tests = [http.Status.expect(400)]

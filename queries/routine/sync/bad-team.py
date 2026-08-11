@@ -38,4 +38,4 @@ class QueryNotTraversableStatus(Test):
         return TestResult(passed, body["status"] if not passed else None)
 
 
-tests = [http.status(400), QueryNotTraversableStatus]
+tests = [http.Status.expect(400), QueryNotTraversableStatus]

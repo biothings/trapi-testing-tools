@@ -3,23 +3,27 @@ from typing import override
 import httpx
 
 from tests.base_test import Test, TestResult
+from tests.params import bind
 
 
-def status(*status_code: int) -> type[Test]:
-    """Generate a status test for the given status code set."""
+class Status(Test):
+    """status code 200."""
 
-    class StatusTest(Test):
-        @override
-        @staticmethod
-        def test(response: httpx.Response) -> TestResult:
-            passed = response.status_code in [*status_code]
-            return TestResult(
-                passed,
-                info=f"status is {response.status_code}" if not passed else None,
-            )
+    @override
+    @staticmethod
+    def test(
+        response: httpx.Response, *, codes: tuple[int, ...] = (200,)
+    ) -> TestResult:
+        passed = response.status_code in codes
+        return TestResult(
+            passed, None if passed else f"status is {response.status_code}"
+        )
 
-    StatusTest.__doc__ = (
-        f"status code ∈ ({', '.join([str(code) for code in status_code])})."
-    )
+    @classmethod
+    def expect(cls, *codes: int) -> type[Test]:
+        """Build a variant passing when the status code is one of ``codes``.
 
-    return StatusTest
+        e.g. ``http.Status.expect(404)`` or ``http.Status.expect(200, 202)``.
+        """
+        listing = ", ".join(str(code) for code in codes)
+        return bind(cls, name=f"status code ∈ ({listing})", codes=codes)

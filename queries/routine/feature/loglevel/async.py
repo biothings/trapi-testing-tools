@@ -22,6 +22,6 @@ body = {
     },
 }
 tests = [
-    http.status(200),
+    http.Status,
     logs.NoDebugLogs,
 ]

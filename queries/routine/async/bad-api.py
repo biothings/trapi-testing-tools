@@ -20,4 +20,4 @@ body = {
         }
     },
 }
-tests = [http.status(200), logs.MissingIDLog]
+tests = [http.Status, logs.MissingIDLog]
