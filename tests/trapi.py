@@ -10,8 +10,8 @@ from typing import override
 from weakref import WeakKeyDictionary
 
 import httpx
-from translator_tom import MetaKnowledgeGraph, Response
-from translator_tom.validation import semantic_validate
+from translator_tom.v1_6 import MetaKnowledgeGraph, Response
+from translator_tom.v1_6.validation import semantic_validate
 
 from tests.base_test import Test, TestResult
 

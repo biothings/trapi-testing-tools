@@ -7,7 +7,7 @@ import typer
 from InquirerPy.prompts.confirm import ConfirmPrompt
 from rich.console import Console
 from rich.text import Text
-from translator_tom import Response
+from translator_tom.v1_6 import Response  # TTT targets TRAPI 1.6
 
 from analysis.base_analysis import AnalysisClass, ParametrizedAnalysis
 from trapi_testing_tools.types import OutputModes
