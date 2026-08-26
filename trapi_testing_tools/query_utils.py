@@ -3,8 +3,8 @@
 from pathlib import Path
 from typing import Any
 
-from translator_tom import (
-    Biolink,
+from translator_tom import Biolink  # version-agnostic
+from translator_tom.v1_6 import (  # TTT targets TRAPI 1.6; TOM 2.0 defaults top-level to 2.0
     Message,
     PathfinderQueryGraph,
     QEdge,
