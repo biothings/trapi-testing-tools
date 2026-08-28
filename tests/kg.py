@@ -92,6 +92,29 @@ class HasKLAT(Test):
         return TestResult(len(missing) == 0, missing or None)
 
 
+class HasPrimaryKnowledgeSource(Test):
+    """all edges have a primary_knowledge_source."""
+
+    @override
+    @staticmethod
+    def test(response: httpx.Response) -> TestResult:
+        model = trapi.parse_or_fail(response)
+        if isinstance(model, TestResult):
+            return model
+
+        kg = model.message.knowledge_graph
+        edges = kg.edges if kg else {}
+        missing = [
+            edge_id
+            for edge_id, edge in edges.items()
+            if not any(
+                source.resource_role == "primary_knowledge_source"
+                for source in edge.sources
+            )
+        ]
+        return TestResult(len(missing) == 0, missing or None)
+
+
 @dataclass
 class _Reachability:
     """What a walk of a message's results reaches in the knowledge graph.
@@ -108,6 +131,9 @@ class _Reachability:
 
     edges: set[EdgeID] = field(default_factory=set)
     """kg.edges keys that are reachable from the results."""
+
+    aux_graphs: set[AuxGraphID] = field(default_factory=set)
+    """auxiliary_graphs keys that are reachable from the results."""
 
     missing_nodes: set[CURIE] = field(default_factory=set)
     """Node references (bindings or edge nodes) absent from kg.nodes."""
@@ -148,6 +174,7 @@ class _ReachabilityWalker:
         if aux is None:
             self.reach.missing_aux_graphs.add(aux_id)
             return
+        self.reach.aux_graphs.add(aux_id)
         self._queue.extend(aux.edges)
 
     def _setup(self) -> None:
@@ -244,3 +271,25 @@ class BindingsResolveToKG(Test):
             ]
         )
         return TestResult(len(dangling) == 0, dangling or None)
+
+
+class NoOrphanAuxGraphs(Test):
+    """no orphan auxiliary graphs."""
+
+    @override
+    @staticmethod
+    def test(response: httpx.Response) -> TestResult:
+        model = trapi.parse_or_fail(response)
+        if isinstance(model, TestResult):
+            return model
+
+        aux_graphs = model.message.auxiliary_graphs_dict
+        if not aux_graphs:
+            return TestResult(True, None)
+
+        reach = _walk_reachable(model.message)
+        orphans = [
+            f"orphan auxiliary graph: {aux_id}"
+            for aux_id in sorted(aux_graphs.keys() - reach.aux_graphs)
+        ]
+        return TestResult(len(orphans) == 0, orphans or None)

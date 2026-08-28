@@ -9,7 +9,7 @@ a plain, list-usable `type[Test]`.
 """
 
 import operator
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import ClassVar, Literal, cast
 
 import httpx
@@ -82,6 +82,48 @@ def bind(cls: type[Test], /, name: str | None = None, **params: object) -> type[
         (Test,),
         {"test": staticmethod(test), "__doc__": name or cls.__doc__},
     )
+
+
+def _label(cls: type[Test]) -> str:
+    """A test's display label: its docstring (minus the period) or its class name."""
+    return cls.__doc__.removesuffix(".") if cls.__doc__ else cls.__name__
+
+
+def composite(subtests: Sequence[type[Test]], /, name: str) -> type[Test]:
+    """A `Test` that runs ``subtests`` and reports only the ones that fail.
+
+    Passes—as a single line—when every sub-test passes; on failure the info lists each
+    failed sub-test by its label, its own info indented beneath. This collapses a run of
+    always-silent-on-pass sanity checks into one entry, surfacing their detail only when
+    something breaks. ``name`` becomes the composite's display label.
+    """
+
+    def test(response: httpx.Response) -> TestResult:
+        failures: list[str] = []
+        for sub in subtests:
+            label = _label(sub)
+            try:
+                result = sub.test(response)
+            except Exception as error:
+                failures.append(f"✗ {label}: error: {error!r}")
+                continue
+            if result.passed:
+                continue
+
+            if isinstance(result.info, str) and "\n" not in result.info:
+                failures.append(f"✗ {label} ({result.info})")
+            else:
+                failures.append(f"✗ {label}")
+                lines = (
+                    result.info.split("\n")
+                    if isinstance(result.info, str)
+                    else result.info or []
+                )
+                failures.extend(f"    {line}" for line in lines)
+
+        return TestResult(len(failures) == 0, failures or None)
+
+    return type("Composite", (Test,), {"test": staticmethod(test), "__doc__": name})
 
 
 class CountTest(Test):

@@ -231,11 +231,13 @@ class HasResults(Test):
         results = model.message.results_list
         return TestResult(passed=len(results) > 0, info=f"{len(results)} results")
 ```
-Parameterized tests come from `tests/params.py`: `bind` pre-applies keyword args
-to make a `Test` variant, and the `.expect` classmethods use it (e.g.
-`http.Status.expect(404)`, `kg.EdgeCount.expect(50, "gte")`). Existing helpers
-live in `tests/` (`http`, `kg`, `logs`, `results`, `metakg`, `params`, plus the
-TOM helpers in `trapi`); reuse them before writing new ones.
+Parameterized and combined tests come from `tests/params.py`: `bind` pre-applies
+keyword args to make a `Test` variant — the `.expect` classmethods use it (e.g.
+`http.Status.expect(404)`, `kg.EdgeCount.expect(50, "gte")`) — and `composite`
+bundles several tests into one that stays silent until a sub-test fails (see
+`standard_battery`'s "integrity checks"). Existing helpers live in `tests/`
+(`http`, `kg`, `logs`, `results`, `metakg`, `params`, plus the TOM helpers in
+`trapi`); reuse them before writing new ones.
 
 ## Work in progress — do not rely on
 
