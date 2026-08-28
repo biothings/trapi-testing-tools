@@ -242,13 +242,8 @@ def parse_query(query_module: ModuleType) -> list[Query]:
             raise AttributeError("Query must define an endpoint.")
 
         params = getattr(query_module, "params", {})
-        if not isinstance(params, dict) or any(
-            not isinstance(key, str)
-            for key in params.values()  # pyright:ignore[reportUnknownVariableType]
-        ):
-            raise AttributeError(
-                "Query headers must a dict of header-value string pairs."
-            )
+        if not isinstance(params, dict):
+            raise AttributeError("Query params must be a dict.")
         headers = getattr(query_module, "headers", {})
         if not isinstance(headers, dict) or any(
             not isinstance(key, str) or not isinstance(value, str)
