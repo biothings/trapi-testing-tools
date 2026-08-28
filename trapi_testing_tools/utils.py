@@ -18,14 +18,23 @@ from InquirerPy.prompts.fuzzy import FuzzyPrompt
 from natsort import natsorted
 from platformdirs import PlatformDirs
 from rich import progress
-from rich.console import Console, ConsoleRenderable, Group, RenderHook
+from rich.console import (
+    Console,
+    ConsoleOptions,
+    ConsoleRenderable,
+    Group,
+    RenderHook,
+    RenderResult,
+)
 from rich.live import Live
+from rich.panel import Panel
+from rich.segment import Segment
 from rich.text import Text
 from translator_tom import TOMBase
 
 from tests.base_test import Test
 from trapi_testing_tools.config import CONFIG
-from trapi_testing_tools.types import HTTPMethod, Query
+from trapi_testing_tools.types import HTTPMethod, Query, TestType
 
 SYNC_BASIC_CLIENT = httpx.Client(follow_redirects=True, timeout=None)
 ASYNC_BASIC_CLIENT = httpx.AsyncClient(follow_redirects=True, timeout=None)
@@ -47,6 +56,18 @@ def is_interactive() -> bool:
     return stdin.isatty() and stderr.isatty()
 
 
+def format_size(num_bytes: int) -> str:
+    """Human-readable byte count (e.g. ``12.3 MB``), using 1024-based units."""
+    step = 1024
+    size = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if size < step or unit == "TB":
+            precision = 0 if unit == "B" else 1
+            return f"{size:.{precision}f} {unit}"
+        size /= step
+    return f"{size:.1f} TB"
+
+
 def maybe_print_traceback(
     message: str = "Print traceback for this error?",
 ) -> None:
@@ -61,19 +82,31 @@ def maybe_print_traceback(
             console.print_exception(show_locals=True)
 
 
+class _Gutter:
+    """Render a child with a ``│ `` gutter on every line, wrapped ones included."""
+
+    def __init__(self, renderable: ConsoleRenderable) -> None:
+        self.renderable = renderable
+
+    def __rich_console__(
+        self, console: Console, options: ConsoleOptions
+    ) -> RenderResult:
+        prefix = Segment("│ ", console.get_style("rule.line"))
+        inner = options.update_width(max(1, options.max_width - 2))
+        for line in console.render_lines(self.renderable, inner, pad=False):
+            yield prefix
+            yield from line
+            yield Segment.line()
+
+
 class IndentedBlock(RenderHook):
-    """Render as an indented block."""
+    """Render text as an indented block with a ``│ `` gutter on every wrapped line."""
 
     @override
     def process_renderables(
         self, renderables: list[ConsoleRenderable]
     ) -> list[ConsoleRenderable]:
-        new_renderables = list[ConsoleRenderable]()
-        for renderable in renderables:
-            if isinstance(renderable, Text):
-                new_renderables.append(Text("│ ", style="rule.line", end=""))
-            new_renderables.append(renderable)
-        return new_renderables
+        return [_Gutter(r) if isinstance(r, Text | Panel) else r for r in renderables]
 
 
 def should_output(

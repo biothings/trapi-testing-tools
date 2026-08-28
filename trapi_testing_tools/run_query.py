@@ -25,6 +25,7 @@ from trapi_testing_tools.report import (
 from trapi_testing_tools.types import OutputModes, Query
 from trapi_testing_tools.utils import (
     IndentedBlock,
+    format_size,
     handle_output,
     maybe_print_traceback,
     parse_query,
@@ -143,7 +144,7 @@ def manage_query(  # noqa: PLR0913
     )
     # Use rich text to create a section for this query's context
     console.rule(
-        Text("┌ ", style="rule.line") + str(rel_path) + f"  ·  {env}", align="left"
+        Text("┌ ", style="rule.line") + str(rel_path) + f" · {env}", align="left"
     )
     console.push_render_hook(IndentedBlock())
 
@@ -208,11 +209,12 @@ def manage_query(  # noqa: PLR0913
                 )
             )
 
+    console.pop_render_hook()
+
     # Output (non-pipe only; piping is aggregated into one report by run_queries)
     if not collect:
         _emit_output(final_response, output_modes, save_path, on_fail, query_passed)
 
-    console.pop_render_hook()
     _print_verdict(query_passed, any_tests, total_passed, total_failed)
 
     # In debug mode, keep responses only for failing queries (the ones to inspect).
@@ -283,7 +285,9 @@ def run_query(query: Query, url: str) -> StepRun:
         elapsed = response.elapsed.total_seconds()
         response.raise_for_status()
         body = cast(dict[str, Any], response.json())
-        console.print(f"Query elapsed time {elapsed}s", highlight=False)
+        console.print(
+            f"Query elapsed time {elapsed} s · {format_size(len(response.content))}"
+        )
 
         if "asyncquery" not in cast(str, query.endpoint):
             return StepRun(
@@ -297,7 +301,10 @@ def run_query(query: Query, url: str) -> StepRun:
     except httpx.HTTPStatusError as error:
         console.print(error)
         errored = error.response
-        console.print(f"total query elapsed time: {elapsed} (±0)s", highlight=False)
+        console.print(
+            f"total query elapsed time: {elapsed} (±0)s · {format_size(len(errored.content))}",
+            highlight=False,
+        )
         return StepRun(
             errored, "ok", errored.status_code, None, elapsed, target, method
         )
@@ -335,7 +342,9 @@ def _await_async_result(
         elapsed += response.elapsed.total_seconds()
 
     console.print(
-        f"total query elapsed time: {elapsed} (±{uncertainty})s", highlight=False
+        f"total query elapsed time: {elapsed} (±{uncertainty})s"
+        f"  ·  {format_size(len(response.content))}",
+        highlight=False,
     )
     return response, "ok", elapsed
 
