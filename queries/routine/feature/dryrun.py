@@ -4,7 +4,6 @@ method = "POST"
 endpoint = "/query"
 params = dict(dryrun=True)
 body = {
-    "submitter": "trapi-testing-tools",
     "message": {
         "query_graph": {
             "nodes": {

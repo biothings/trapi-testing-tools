@@ -8,7 +8,6 @@ from tests.base_test import Test, TestResult
 method = "POST"
 endpoint = "/team/lalala/query"
 body = {
-    "submitter": "trapi-testing-tools",
     "message": {
         "query_graph": {
             "nodes": {

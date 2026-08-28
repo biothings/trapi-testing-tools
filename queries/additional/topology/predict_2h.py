@@ -4,7 +4,6 @@ method = "POST"
 endpoint = "/query"
 body = {
     "parameters": {"tiers": [0], "timeout": -1},
-    "submitter": "trapi-testing-tools",
     "message": {
         "query_graph": {
             "nodes": {

@@ -4,7 +4,6 @@ from tests.battery import standard_battery
 method = "POST"
 endpoint = "/team/Text%20Mining%20Provider/asyncquery"
 body = {
-    "submitter": "trapi-testing-tools",
     "message": {
         "query_graph": {
             "nodes": {

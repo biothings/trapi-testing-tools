@@ -4,7 +4,6 @@ from tests.battery import standard_battery
 method = "POST"
 endpoint = "/asyncquery"
 body = {
-    "submitter": "trapi-testing-tools",
     "bypass_cache": True,
     "message": {
         "query_graph": {

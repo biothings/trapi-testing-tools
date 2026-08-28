@@ -4,7 +4,6 @@ from tests.battery import standard_battery
 method = "POST"
 endpoint = "/smartapi/d22b657426375a5295e7da8a303b9893/query"
 body = {
-    "submitter": "trapi-testing-tools",
     "message": {
         "query_graph": {
             "nodes": {

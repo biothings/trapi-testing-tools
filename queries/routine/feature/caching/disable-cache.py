@@ -3,7 +3,6 @@ from tests.battery import standard_battery
 from trapi_testing_tools.types import Query
 
 query_body = {
-    "submitter": "trapi-testing-tools",
     "message": {
         "query_graph": {
             "edges": {"e01": {"subject": "n0", "object": "n1"}},

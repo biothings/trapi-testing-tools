@@ -41,6 +41,9 @@ class TTTConfig(BaseSettings):
     test_repo: str = "NCATSTranslator/Tests"
     default_environment: str = "retriever"
     viewer: str = "fx"
+    submitter: str = (
+        "trapi-testing-tools"  # auto-injected into TRAPI bodies; "" disables
+    )
     environments: dict[str, dict[str, str]] = Field(
         default_factory=lambda: DEFAULT_ENVS
     )

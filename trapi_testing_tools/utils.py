@@ -191,6 +191,38 @@ def serialize_body(body: object) -> dict[str, Any] | list[Any] | None:
     raise AttributeError("Query body must be a dict, list, TOM model, or None.")
 
 
+_TRAPI_QUERY_ENDPOINTS = ("/query", "/asyncquery")
+
+
+def _is_trapi_query(query: Query) -> bool:
+    """Whether a query looks like a TRAPI query submission.
+
+    Gated on both signals: the endpoint is a TRAPI query path, and the (serialized)
+    body structurally matches a TRAPI query envelope — a `message` with a `query_graph`.
+    """
+    endpoint = (query.endpoint or "").rstrip("/")
+    if not endpoint.endswith(_TRAPI_QUERY_ENDPOINTS):
+        return False
+    body = query.body
+    message = body.get("message") if isinstance(body, dict) else None
+    return isinstance(message, dict) and "query_graph" in message
+
+
+def inject_default_submitter(query: Query) -> Query:
+    """Backfill the configured `submitter` into a TRAPI query body when absent.
+
+    No-op when auto-injection is disabled (`CONFIG.submitter` empty), the query isn't a
+    TRAPI query, or the body already sets `submitter` (author-set values are respected).
+    Assumes the body is already serialized (a dict), as after `serialize_body`.
+    """
+    if not CONFIG.submitter or not _is_trapi_query(query):
+        return query
+    body = cast("dict[str, Any]", query.body)
+    if "submitter" in body:
+        return query
+    return replace(query, body={"submitter": CONFIG.submitter, **body})
+
+
 def parse_query(query_module: ModuleType) -> list[Query]:
     """Check that query has required options."""
     queries: list[Query]
@@ -247,7 +279,7 @@ def parse_query(query_module: ModuleType) -> list[Query]:
             )
         ]
 
-    return queries
+    return [inject_default_submitter(query) for query in queries]
 
 
 def cache_tests() -> None:

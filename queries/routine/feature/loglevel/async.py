@@ -4,7 +4,6 @@ method = "POST"
 endpoint = "/asyncquery"
 body = {
     "log_level": "INFO",
-    "submitter": "trapi-testing-tools",
     "message": {
         "query_graph": {
             "nodes": {
