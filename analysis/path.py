@@ -5,10 +5,8 @@ from typing import Annotated
 
 import typer
 from InquirerPy.prompts.fuzzy import FuzzyPrompt
-from translator_tom import Response
-from translator_tom.models.knowledge_graph import KnowledgeGraph
-from translator_tom.models.query_graph import PathfinderQueryGraph
-from translator_tom.models.shared import CURIE, QNodeID
+from translator_tom import CURIE, QNodeID
+from translator_tom.v1_6 import KnowledgeGraph, PathfinderQueryGraph, Response
 
 from analysis.base_analysis import AnalysisOutput, ParametrizedAnalysis
 

@@ -1,8 +1,8 @@
 from typing import override
 
-from translator_tom import Analysis as TOMAnalysis
-from translator_tom import Response
-from translator_tom.models.shared import EdgeID
+from translator_tom import EdgeID
+from translator_tom.v1_6 import Analysis as TOMAnalysis
+from translator_tom.v1_6 import Response
 
 from analysis.base_analysis import Analysis, AnalysisOutput
 

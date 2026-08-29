@@ -1,7 +1,7 @@
 from typing import override
 
 import httpx
-from translator_tom import Response
+from translator_tom.v1_6 import Response
 
 from analysis.base_analysis import Analysis, AnalysisOutput
 from tests.battery import standard_battery

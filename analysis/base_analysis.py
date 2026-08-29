@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import ClassVar
 
 import typer
-from translator_tom import Response
+from translator_tom.v1_6 import Response
 
 AnalysisOutput = dict | list
 """A JSON-serializable analysis result."""

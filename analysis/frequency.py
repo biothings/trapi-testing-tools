@@ -1,8 +1,8 @@
 from collections import Counter
 from typing import override
 
-from translator_tom import Response
-from translator_tom.models.shared import CURIE
+from translator_tom import CURIE
+from translator_tom.v1_6 import Response
 
 from analysis.base_analysis import Analysis, AnalysisOutput
 

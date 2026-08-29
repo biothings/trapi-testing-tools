@@ -2,8 +2,8 @@ from dataclasses import dataclass, field
 from typing import override
 
 import httpx
-from translator_tom import Analysis, Message
-from translator_tom.models.shared import CURIE, AuxGraphID, EdgeID
+from translator_tom import CURIE, AuxGraphID, EdgeID  # version-agnostic ID types
+from translator_tom.v1_6 import Analysis, Message
 
 from tests import trapi
 from tests.base_test import Test, TestResult
