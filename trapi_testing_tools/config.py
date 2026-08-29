@@ -18,8 +18,9 @@ DEFAULT_ENVS = {
     },
     "retriever": {
         "local": "http://localhost:8080",
-        "ci": "https://retriever.ci.transltr.io",
         "dev": "https://dev.retriever.biothings.io",
+        "ci": "https://retriever.ci.transltr.io",
+        "test": "https://retriever.test.transltr.io",
     },
     "shepherd": {
         "aragorn.dev": "https://shepherd.renci.org/aragorn",
