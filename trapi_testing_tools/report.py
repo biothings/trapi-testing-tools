@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any, Literal, NotRequired, TypedDict, cast
 
@@ -9,6 +10,14 @@ import httpx
 ResponseBody = dict[str, Any] | list[Any] | str | None
 
 StepStatus = Literal["ok", "no_response", "timeout", "error"]
+
+
+class PipeMode(str, Enum):
+    """How ``tt test --pipe`` shapes stdout."""
+
+    plain = "plain"  # response body/bodies only (bare if one, else a JSON array)
+    report = "report"  # RunReport envelope, no response bodies
+    full = "full"  # RunReport envelope including response bodies
 
 
 class TestOutcome(TypedDict):
@@ -165,32 +174,37 @@ def pre_run_failure(file: Path, env: str, error: str) -> QueryResult:
     }
 
 
+def _print_body(body: ResponseBody) -> None:
+    """Print one response body: JSON for a dict/list, else the raw text."""
+    print(
+        json.dumps(body, ensure_ascii=False) if isinstance(body, dict | list) else body
+    )
+
+
 def emit_report(
     queries: list[QueryResult],
     envs: list[str],
     passed: bool,
     elapsed: float,
-    report_only: bool,
+    mode: PipeMode,
 ) -> None:
-    """Write the pipe output to stdout.
+    """Write the pipe output to stdout in the shape selected by ``mode``.
 
-    A lone single-step query emits just its raw response body for basic piping.
-    Otherwise emits the aggregate `RunReport` envelope. ``report_only`` always
-    emits the envelope (there are no responses to pipe raw).
+    `PipeMode.plain` emits just the response body/bodies (a lone body bare, for
+    chaining into ``tt analyze``; several as a JSON array); `report`/`full` emit the
+    aggregate `RunReport` envelope (bodies are already in/excluded per step at build).
     """
-    if (
-        not report_only
-        and len(queries) == 1
-        and queries[0]["type"] == "singleton"
-        and queries[0]["steps"]
-    ):
-        response = queries[0]["steps"][0].get("response")
-        if response is not None:
-            print(
-                json.dumps(response, ensure_ascii=False)
-                if isinstance(response, dict | list)
-                else response
-            )
+    if mode is PipeMode.plain:
+        bodies = [
+            body
+            for query in queries
+            for step in query["steps"]
+            if (body := step.get("response")) is not None
+        ]
+        if len(bodies) == 1:
+            _print_body(bodies[0])
+        else:
+            print(json.dumps(bodies, ensure_ascii=False))
         return
 
     report: RunReport = {

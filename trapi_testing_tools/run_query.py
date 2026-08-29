@@ -13,6 +13,7 @@ from rich.text import Text
 import trapi_testing_tools
 from trapi_testing_tools.config import CONFIG
 from trapi_testing_tools.report import (
+    PipeMode,
     QueryResult,
     StepResult,
     StepRun,
@@ -45,14 +46,14 @@ def run_queries(  # noqa: PLR0913
     output_modes: OutputModes,
     save_path: Path | None = None,
     on_fail: bool = False,
-    report_only: bool = False,
+    pipe_mode: PipeMode | None = None,
 ) -> bool:
     """Given a set of queries, run each against each target environment.
 
     ``targets`` is a list of ``(env_name, url)`` pairs; every query runs against
     every target, sequentially. Returns ``True`` only if every run passed. When
-    piping, a single `RunReport` JSON envelope aggregating every query/step is
-    written to stdout.
+    piping (``pipe_mode`` set), stdout gets either the response body/bodies
+    (`PipeMode.plain`) or one aggregate `RunReport` envelope (`report`/`full`).
     """
     collect = output_modes[0] == "pipe"  # only collect responses on pipe (save mem)
     report_queries: list[QueryResult] = []
@@ -105,7 +106,7 @@ def run_queries(  # noqa: PLR0913
                     f"{prefix}_{query_save_path.name}"
                 )
             passed, result = manage_query(
-                query, url, env, output_modes, query_save_path, on_fail, report_only
+                query, url, env, output_modes, query_save_path, on_fail, pipe_mode
             )
             if not passed:
                 all_passed = False
@@ -118,7 +119,7 @@ def run_queries(  # noqa: PLR0913
             [env for env, _url in targets],
             all_passed,
             time.monotonic() - run_start,
-            report_only,
+            pipe_mode or PipeMode.full,
         )
     return all_passed
 
@@ -130,7 +131,7 @@ def manage_query(  # noqa: PLR0913
     output_modes: OutputModes,
     save_path: Path | None,
     on_fail: bool,
-    report_only: bool,
+    pipe_mode: PipeMode | None,
 ) -> tuple[bool, QueryResult | None]:
     """Interpret query as single or multiple and manage steps in running it.
 
@@ -138,6 +139,7 @@ def manage_query(  # noqa: PLR0913
     `QueryResult` when piping (for the aggregate report), else ``None``.
     """
     collect = output_modes[0] == "pipe"
+    include_response = pipe_mode is not PipeMode.report
 
     rel_path = Path(cast(str, query_module.__file__)).relative_to(
         Path(trapi_testing_tools.__path__[0]).parent
@@ -171,7 +173,7 @@ def manage_query(  # noqa: PLR0913
                         run,
                         step_passed=False,
                         tests_passed=True,
-                        include_response=not report_only,
+                        include_response=include_response,
                     )
                 )
             console.pop_render_hook()
@@ -205,7 +207,7 @@ def manage_query(  # noqa: PLR0913
                     step_passed,
                     tests_passed,
                     outcomes,
-                    include_response=not report_only,
+                    include_response=include_response,
                 )
             )
 

@@ -42,7 +42,7 @@ To run a full test of everything in the routine folder, against your local insta
 viewing only failed tests:
 
 ```bash
-tt test -a -d -e bte.local
+tt test -d -e bte.local queries/routine
 ```
 
 ### Specific tests
@@ -90,8 +90,8 @@ tt analyze -f response.json
 # run specific analyses
 tt analyze -f response.json NodeFrequency SupportGraphHierarchy
 
-# pipe in a response and pipe out result
-tt test queries/my_query.py -e retriever.ci -p | tt analyze NodeFrequency -p | jq
+# pipe the response body into an analysis (-p plain pipes just the body)
+tt test queries/my_query.py -e retriever.ci -p plain | tt analyze NodeFrequency -p | jq
 ```
 
 Some analyses take arguments, passed after a `--` separator. You can view analysis
@@ -121,8 +121,8 @@ tests = [http.status(200)]  # You can optionally set tests to validate the respo
 The `body` may be a plain dict (as above) or a
 [translator_tom](https://github.com/NCATSTranslator/TRAPIObjectModeling) (TOM) model.
 
-Queries placed under the `queries/routine` directory will be run when `tt test` is
-invoked with the option `--all`
+Queries placed under the `queries/routine` directory are the routine battery — run
+them all with `tt test queries/routine` (folders expand recursively).
 
 ### Multi-query tests
 

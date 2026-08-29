@@ -51,12 +51,13 @@ payloads go to **stdout**, which is what makes the pipelines below work.
 
 **Run queries** (`tt test`):
 ```bash
-tt test -a -d -e bte.local          # all routine queries, stop on failures, local bte
+tt test queries/routine -d -e bte.local  # whole routine battery, stop on failures, local bte
 tt test queries/routine/sync/general.py -e retriever.ci
 tt test queries/my_query.py -e bte.ci -e retriever.ci   # run against multiple environments
 tt test                             # no args → interactively pick query file(s) + environment(s)
 ```
-`-a/--all` runs everything under `queries/routine/**`. `-d/--debug` pauses on
+Pass the `queries/routine` folder (or any folder) to run a whole battery — folders
+expand recursively. `-d/--debug` pauses on
 failing queries to view/save (and, when piping, keeps responses only for
 failures). `-e` sets the environment(s) — repeatable (interactive picker is
 multiselect); with multiple, each query runs against each sequentially (see
@@ -75,13 +76,13 @@ input you **must** name analyses (interactive selection needs `-f`).
 
 **Pipe between commands** (`-p/--pipe` emits JSON to stdout):
 ```bash
-tt test queries/my_query.py -e retriever.ci -p | tt analyze NodeFrequency -p | jq
+tt test queries/my_query.py -e retriever.ci -p plain | tt analyze NodeFrequency -p | jq
 ```
-For `tt test`, a lone single-step query pipes its **bare response** (so it chains
-into `tt analyze`); multiple queries or a multi-step query instead emit one
-`RunReport` envelope (per-query/step status, tests, timing, responses).
-`-r/--report` implies `-p` and drops response bodies (run/test info only); `-d`
-with `-p` keeps only failing responses. Multiple `-e` run every query against
+For `tt test`, `--pipe/-p` requires a mode: `-p plain` pipes just the **response body**
+(a lone body bare, so it chains into `tt analyze`; several as a JSON array); `-p report`
+emits one `RunReport` envelope (per-query/step status, tests, timing, size — no bodies);
+`-p full` is that envelope with responses. `-d` with
+`-p` keeps only failing responses. Multiple `-e` run every query against
 every environment; the envelope's top-level `envs` and each query's `env`
 identify which run is which.
 
@@ -95,7 +96,8 @@ tt curl <query> -e <env>      # print the query as a curl command
 ```
 Output flags shared across commands: `-v/--view` / `-V/--no-view` (view opens
 `CONFIG.viewer`, default `fx`), `-s/--save <path>` / `-S/--no-save`, `-p/--pipe`
-(plus `-r/--report` on `tt test`, which implies `-p` and omits response bodies).
+(on `tt test`, `-p` requires a mode: `-p plain` = response body, `-p report` = report
+without bodies, `-p full` = report with bodies).
 
 **Automated / non-interactive use: always pass explicit output flags.** When
 view/save flags are omitted they default to `prompt`, and the command blocks on
@@ -118,7 +120,7 @@ you type most.
 ## Authoring a query
 
 Drop a `.py` file under `queries/`. Put it under `queries/routine/**` to include
-it in `tt test --all`. Note `.gitignore` tracks only `queries/routine` and
+it in the `tt test queries/routine` battery. Note `.gitignore` tracks only `queries/routine` and
 `queries/additional` — files elsewhere under `queries/` are local-only.
 
 **Single request** — module-level globals (`method` defaults to `GET`;
