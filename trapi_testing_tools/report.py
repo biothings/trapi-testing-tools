@@ -36,6 +36,7 @@ class StepResult(TypedDict):
     error: str | None  # message when status != "ok", else None
     passed: bool  # request ok AND every test passed
     elapsed_seconds: float
+    size_bytes: int  # decoded response body size; 0 when there's no response
     tests: TestSummary
     response: NotRequired[ResponseBody]  # omittable by a future flag
 
@@ -49,6 +50,7 @@ class QueryResult(TypedDict):
     passed: bool  # every step passed
     error: str | None  # pre-run failure (import/parse/missing); else None
     elapsed_seconds: float
+    size_bytes: int  # total decoded response bytes across steps
     steps: list[StepResult]
 
 
@@ -63,6 +65,7 @@ class RunReport(TypedDict):
     query_count: int  # number of query results (files x environments)
     passed: bool  # every query passed
     elapsed_seconds: float
+    size_bytes: int  # total decoded response bytes across queries
     queries: list[QueryResult]
 
 
@@ -92,6 +95,11 @@ def _response_body(response: httpx.Response | None) -> ResponseBody:
         return response.text
 
 
+def _response_size(response: httpx.Response | None) -> int:
+    """Decoded response body size in bytes, or 0 when there's no response."""
+    return len(response.content) if response is not None else 0
+
+
 def build_step(
     run: StepRun,
     step_passed: bool,
@@ -114,6 +122,7 @@ def build_step(
         "error": run.error,
         "passed": step_passed,
         "elapsed_seconds": round(run.elapsed, 3),
+        "size_bytes": _response_size(run.response),
         "tests": {"passed": tests_passed, "cases": outcomes or []},
     }
     if include_response:
@@ -137,6 +146,7 @@ def build_query_result(  # noqa: PLR0913
         "passed": passed,
         "error": None,
         "elapsed_seconds": round(elapsed, 3),
+        "size_bytes": sum(step["size_bytes"] for step in steps),
         "steps": steps,
     }
 
@@ -150,6 +160,7 @@ def pre_run_failure(file: Path, env: str, error: str) -> QueryResult:
         "passed": False,
         "error": error,
         "elapsed_seconds": 0.0,
+        "size_bytes": 0,
         "steps": [],
     }
 
@@ -187,6 +198,7 @@ def emit_report(
         "query_count": len(queries),
         "passed": passed,
         "elapsed_seconds": round(elapsed, 3),
+        "size_bytes": sum(query["size_bytes"] for query in queries),
         "queries": queries,
     }
     print(json.dumps(report, ensure_ascii=False))
