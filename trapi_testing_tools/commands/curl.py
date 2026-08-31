@@ -12,6 +12,7 @@ from rich.console import Console
 
 import trapi_testing_tools
 from trapi_testing_tools.commands.utils import set_environment, set_queries
+from trapi_testing_tools.types import FollowUp
 from trapi_testing_tools.utils import ENVIRONMENT_MAPPING, parse_query
 
 console = Console(stderr=True)
@@ -59,6 +60,13 @@ def curl(
         queries = queries[0:1]
 
     for step in queries:
+        if isinstance(step, FollowUp):
+            console.print(
+                f"# {type(step).__name__}: dynamic FollowUp step, cannot render as static curl",
+                style="italic bright_black",
+            )
+            continue
+
         url = f"{ENVIRONMENT_MAPPING[environment]}{step.endpoint}"
         params = "&".join([f"{name}={value}" for name, value in step.params.items()])
         if len(params) > 0:

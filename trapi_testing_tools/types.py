@@ -1,4 +1,5 @@
-from dataclasses import dataclass, field
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field, fields
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -8,6 +9,8 @@ if TYPE_CHECKING:
     # translator_tom (TOM) is only referenced for typing; it is imported lazily at
     # runtime (in parse_query) so TOM-less, raw-dict query authoring never loads it.
     from translator_tom import TOMBase
+
+    from trapi_testing_tools.report import StepRecord
 
 
 class TestType(StrEnum):
@@ -40,3 +43,19 @@ class Query:
     tests: list[type[Test]] | None = None
     trapi_version: Literal["1.6", "2.0"] = "1.6"
     """TRAPI version the response is parsed/validated against (see `trapi_models`)."""
+
+
+class FollowUp(Query, ABC):
+    """A step whose `Query` is built at run time from prior steps' results.
+
+    Subclass and implement `build`; place instances in a query file's `steps` list.
+    """
+
+    @abstractmethod
+    def build(self, previous: "StepRecord", history: "list[StepRecord]") -> Query:
+        """Build this step's concrete `Query`. `previous` is `history[-1]`."""
+
+    def derive(self, **overrides: Any) -> Query:
+        """A `Query` from this instance's fields, with `overrides` applied."""
+        base = {f.name: getattr(self, f.name) for f in fields(Query)}
+        return Query(**{**base, **overrides})

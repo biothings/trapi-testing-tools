@@ -3,7 +3,8 @@ import json
 import shutil
 import subprocess
 import zipfile
-from contextlib import redirect_stdout
+from collections.abc import Iterator
+from contextlib import contextmanager, redirect_stdout
 from dataclasses import replace
 from http import HTTPStatus
 from pathlib import Path
@@ -26,19 +27,21 @@ from rich.console import (
     RenderHook,
     RenderResult,
 )
+from rich.highlighter import NullHighlighter
 from rich.live import Live
 from rich.panel import Panel
 from rich.segment import Segment
+from rich.styled import Styled
 from rich.text import Text
 from translator_tom import TOMBase
 
 from tests.base_test import Test
 from trapi_testing_tools.config import CONFIG
+from trapi_testing_tools.console import console
 from trapi_testing_tools.types import HTTPMethod, Query
 
 SYNC_BASIC_CLIENT = httpx.Client(follow_redirects=True, timeout=None)
 ASYNC_BASIC_CLIENT = httpx.AsyncClient(follow_redirects=True, timeout=None)
-console = Console(stderr=True)
 
 
 ENVIRONMENT_MAPPING = dict[str, str]()
@@ -107,6 +110,33 @@ class IndentedBlock(RenderHook):
         self, renderables: list[ConsoleRenderable]
     ) -> list[ConsoleRenderable]:
         return [_Gutter(r) if isinstance(r, Text | Panel) else r for r in renderables]
+
+
+class _CommentStyle(RenderHook):
+    """Recolor printed renderables to comment-color (matches the re-run hint)."""
+
+    @override
+    def process_renderables(
+        self, renderables: list[ConsoleRenderable]
+    ) -> list[ConsoleRenderable]:
+        return [Styled(r, "italic bright_black") for r in renderables]
+
+
+@contextmanager
+def comment_console() -> Iterator[None]:
+    """Within the block, everything printed to the runner `console` is comment-colored.
+
+    Frames a `FollowUp.build`'s own logging as ambient commentary (highlighting off for a
+    uniform grey, like the re-run hint).
+    """
+    highlighter = console.highlighter
+    console.highlighter = NullHighlighter()
+    console.push_render_hook(_CommentStyle())
+    try:
+        yield
+    finally:
+        console.pop_render_hook()
+        console.highlighter = highlighter
 
 
 def should_output(

@@ -139,6 +139,36 @@ def build_step(
     return step
 
 
+@dataclass(frozen=True)
+class StepRecord:
+    """A completed step's result, handed to later `FollowUp.build` calls."""
+
+    response: httpx.Response | None
+    status: StepStatus
+    http_status: int | None
+    error: str | None
+    elapsed: float
+    target: str
+    method: str
+    tests: TestSummary
+
+
+def build_record(
+    run: StepRun, tests_passed: bool, outcomes: list[TestOutcome]
+) -> StepRecord:
+    """Assemble the `StepRecord` handed to later `FollowUp.build` calls."""
+    return StepRecord(
+        response=run.response,
+        status=run.status,
+        http_status=run.http_status,
+        error=run.error,
+        elapsed=run.elapsed,
+        target=run.target,
+        method=run.method,
+        tests={"passed": tests_passed, "cases": outcomes},
+    )
+
+
 def build_query_result(  # noqa: PLR0913
     path: Path,
     env: str,
