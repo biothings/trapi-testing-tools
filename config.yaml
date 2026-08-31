@@ -1,4 +1,14 @@
 ---
+# How async /asyncquery results are received (see README "Async queries").
+# Defaults shown below; uncomment to change. `auto` = direct callback for local
+# targets, cloudflared tunnel for remote, poll fallback if unavailable.
+# callback:
+#   mode: auto  # auto | direct | tunnel | poll
+#   host: 127.0.0.1  # advertised host for direct (e.g. host.docker.internal)
+#   bind: 127.0.0.1  # bind address (0.0.0.0 to reach from a container)
+#   port: 0  # 0 = OS-assigned ephemeral port
+#   cloudflared_path: cloudflared
+
 environments:
   bte:
     local: http://localhost:3000/v1

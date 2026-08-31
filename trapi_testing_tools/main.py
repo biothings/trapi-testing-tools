@@ -15,6 +15,7 @@ from trapi_testing_tools.commands.harness import app as harness_app
 from trapi_testing_tools.commands.ping import app as ping_app
 from trapi_testing_tools.commands.pk import app as pk_app
 from trapi_testing_tools.commands.test import app as test_app
+from trapi_testing_tools.commands.tunnel import app as tunnel_app
 from trapi_testing_tools.commands.validate import app as validate_app
 
 console = Console(stderr=True)
@@ -53,6 +54,7 @@ app.add_typer(ping_app)
 app.add_typer(harness_app)
 app.add_typer(pk_app)
 app.add_typer(curl_app)
+app.add_typer(tunnel_app)
 
 
 def main() -> None:

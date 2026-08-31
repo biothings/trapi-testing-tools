@@ -1,7 +1,7 @@
 from copy import deepcopy
-from typing import ClassVar, override
+from typing import ClassVar, Literal, override
 
-from pydantic import Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -35,6 +35,25 @@ DEFAULT_ENVS = {
 }
 
 
+class CallbackConfig(BaseModel):
+    """Settings for receiving `/asyncquery` callbacks instead of polling.
+
+    ``mode`` picks how TTT is reached: ``direct`` advertises the local receiver
+    straight to the service, ``tunnel`` exposes it via a cloudflared quick tunnel,
+    ``poll`` keeps the legacy status-polling, and ``auto`` chooses direct for
+    loopback/private targets and tunnel otherwise (falling back to poll if
+    cloudflared is unavailable).
+    """
+
+    mode: Literal["auto", "tunnel", "direct", "poll"] = "auto"
+    host: str = (
+        "127.0.0.1"  # advertised host for direct mode (e.g. host.docker.internal)
+    )
+    bind: str = "127.0.0.1"  # receiver bind address (0.0.0.0 to reach from a container)
+    port: int = 0  # 0 = OS-assigned ephemeral port
+    cloudflared_path: str = "cloudflared"
+
+
 class TTTConfig(BaseSettings):
     """Basic config for the TRAPI Testing Tools."""
 
@@ -48,6 +67,7 @@ class TTTConfig(BaseSettings):
     environments: dict[str, dict[str, str]] = Field(
         default_factory=lambda: DEFAULT_ENVS
     )
+    callback: CallbackConfig = Field(default_factory=CallbackConfig)
 
     @field_validator("environments", mode="after")
     @classmethod

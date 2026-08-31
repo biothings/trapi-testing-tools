@@ -1,16 +1,22 @@
 import importlib
 import time
+from dataclasses import replace
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Literal, cast
 
 import httpx
 from rich import box
-from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
 import trapi_testing_tools
+from trapi_testing_tools.callback import (
+    PLACEHOLDER_CALLBACK,
+    CallbackSession,
+    callback_session,
+    make_synthetic_response,
+)
 from trapi_testing_tools.config import CONFIG
 from trapi_testing_tools.report import (
     PipeMode,
@@ -26,18 +32,19 @@ from trapi_testing_tools.report import (
 from trapi_testing_tools.types import OutputModes, Query
 from trapi_testing_tools.utils import (
     IndentedBlock,
+    console,
     format_size,
     handle_output,
     maybe_print_traceback,
     parse_query,
 )
 
-console = Console(stderr=True)
-
-
 CLIENT = httpx.Client(
     follow_redirects=True, timeout=CONFIG.timeout if CONFIG.timeout >= 0 else None
 )
+
+# The status endpoint can 404 briefly before the server stores the (working) job.
+_MAX_STATUS_NOT_FOUND = 3
 
 
 def run_queries(  # noqa: PLR0913
@@ -47,6 +54,7 @@ def run_queries(  # noqa: PLR0913
     save_path: Path | None = None,
     on_fail: bool = False,
     pipe_mode: PipeMode | None = None,
+    callback_mode: str | None = None,
 ) -> bool:
     """Given a set of queries, run each against each target environment.
 
@@ -61,57 +69,67 @@ def run_queries(  # noqa: PLR0913
 
     all_passed = True
     multiple = len(files) > 1 or len(targets) > 1
-    for path in files:
-        file = path.resolve().relative_to(Path(trapi_testing_tools.__path__[0]).parent)
-        if file.suffix != ".py":
-            console.print(
-                f"INFO: skipping {file} as it is not a python file",
-                style="italic bright_black",
+    with callback_session(callback_mode) as session:
+        for path in files:
+            file = path.resolve().relative_to(
+                Path(trapi_testing_tools.__path__[0]).parent
             )
-            continue
-        if not file.exists():
-            console.print(f"ERROR: {file} does not exist. Skipping...", style="red")
-            all_passed = False
-            if collect:
-                report_queries.extend(
-                    pre_run_failure(file, env, "file does not exist")
-                    for env, _url in targets
+            if file.suffix != ".py":
+                console.print(
+                    f"INFO: skipping {file} as it is not a python file",
+                    style="italic bright_black",
                 )
-            continue
-        try:
-            import_path = ".".join(file.with_suffix("").parts)
-            query = importlib.import_module(import_path)
-        except Exception as error:
-            console.print(
-                f"ERROR: failed to read query file due to {error!r}. The query will be skipped."
-            )
-            maybe_print_traceback()
-            all_passed = False
-            if collect:
-                report_queries.extend(
-                    pre_run_failure(file, env, repr(error)) for env, _url in targets
-                )
-            continue
-
-        qualified = ".".join(file.with_suffix("").parts).removeprefix("queries.")
-        for env, url in targets:
-            query_save_path = save_path
-            if query_save_path is not None and multiple:
-                # Prefix by environment and/or query path so runs don't collide.
-                prefix = ".".join(
-                    ([env] if len(targets) > 1 else [])
-                    + ([qualified] if len(files) > 1 else [])
-                )
-                query_save_path = query_save_path.with_name(
-                    f"{prefix}_{query_save_path.name}"
-                )
-            passed, result = manage_query(
-                query, url, env, output_modes, query_save_path, on_fail, pipe_mode
-            )
-            if not passed:
+                continue
+            if not file.exists():
+                console.print(f"ERROR: {file} does not exist. Skipping...", style="red")
                 all_passed = False
-            if collect and result is not None:
-                report_queries.append(result)
+                if collect:
+                    report_queries.extend(
+                        pre_run_failure(file, env, "file does not exist")
+                        for env, _url in targets
+                    )
+                continue
+            try:
+                import_path = ".".join(file.with_suffix("").parts)
+                query = importlib.import_module(import_path)
+            except Exception as error:
+                console.print(
+                    f"ERROR: failed to read query file due to {error!r}. The query will be skipped."
+                )
+                maybe_print_traceback()
+                all_passed = False
+                if collect:
+                    report_queries.extend(
+                        pre_run_failure(file, env, repr(error)) for env, _url in targets
+                    )
+                continue
+
+            qualified = ".".join(file.with_suffix("").parts).removeprefix("queries.")
+            for env, url in targets:
+                query_save_path = save_path
+                if query_save_path is not None and multiple:
+                    # Prefix by environment and/or query path so runs don't collide.
+                    prefix = ".".join(
+                        ([env] if len(targets) > 1 else [])
+                        + ([qualified] if len(files) > 1 else [])
+                    )
+                    query_save_path = query_save_path.with_name(
+                        f"{prefix}_{query_save_path.name}"
+                    )
+                passed, result = manage_query(
+                    query,
+                    url,
+                    env,
+                    output_modes,
+                    query_save_path,
+                    on_fail,
+                    pipe_mode,
+                    session,
+                )
+                if not passed:
+                    all_passed = False
+                if collect and result is not None:
+                    report_queries.append(result)
 
     if collect:
         emit_report(
@@ -132,6 +150,7 @@ def manage_query(  # noqa: PLR0913
     save_path: Path | None,
     on_fail: bool,
     pipe_mode: PipeMode | None,
+    session: CallbackSession | None = None,
 ) -> tuple[bool, QueryResult | None]:
     """Interpret query as single or multiple and manage steps in running it.
 
@@ -161,7 +180,7 @@ def manage_query(  # noqa: PLR0913
     final_response: httpx.Response | None = None
 
     for query in queries:
-        run = run_query(query, url)
+        run = run_query(query, url, session)
         final_response = run.response
         query_elapsed += run.elapsed
 
@@ -266,8 +285,15 @@ def _print_verdict(
     console.print(f"└ {message}", style="rule.line", markup=True)
 
 
-def run_query(query: Query, url: str) -> StepRun:
+def run_query(
+    query: Query, url: str, session: CallbackSession | None = None
+) -> StepRun:
     """Run an individual query, handling sync or async intelligently."""
+    is_async = "asyncquery" in (query.endpoint or "")
+    callback_token: str | None = None
+    if is_async:
+        query, callback_token = _prepare_async_callback(query, url, session)
+
     target = url + cast(str, query.endpoint)
     method = cast(str, query.method)
     elapsed = 0.0
@@ -291,12 +317,22 @@ def run_query(query: Query, url: str) -> StepRun:
             f"Query elapsed time {elapsed} s · {format_size(len(response.content))}"
         )
 
-        if "asyncquery" not in cast(str, query.endpoint):
+        if not is_async:
             return StepRun(
                 response, "ok", response.status_code, None, elapsed, target, method
             )
 
-        response, status, elapsed = _await_async_result(response, body, url, elapsed)
+        if callback_token is not None:
+            job_id = body.get("job_id") if isinstance(body, dict) else None
+            if job_id:
+                console.print(f"Status URL: {url}/asyncquery_status/{job_id}")
+            response, status, elapsed = _await_callback_result(
+                cast(CallbackSession, session), callback_token, response, elapsed
+            )
+        else:
+            response, status, elapsed = _await_async_result(
+                response, body, url, elapsed
+            )
         http_status = response.status_code if response is not None else None
         return StepRun(response, status, http_status, None, elapsed, target, method)
 
@@ -316,6 +352,54 @@ def run_query(query: Query, url: str) -> StepRun:
         status = "timeout" if isinstance(error, httpx.TimeoutException) else "error"
         console.print(f"total query elapsed time: {elapsed} (±0)s", highlight=False)
         return StepRun(None, status, None, repr(error), elapsed, target, method)
+
+
+def _prepare_async_callback(
+    query: Query, url: str, session: CallbackSession | None
+) -> tuple[Query, str | None]:
+    """Inject a receiver callback into an async body when TTT owns the callback.
+
+    Returns the (possibly rewritten) query and a token to await, or a ``None`` token for
+    the poll path (an author-set callback is respected; poll gets a placeholder).
+    """
+    if not isinstance(query.body, dict):
+        return query, None
+    if query.body.get("callback"):
+        return query, None
+
+    mode = session.prepare(url) if session is not None else "poll"
+    if mode == "poll":
+        console.print(f"Callback: {PLACEHOLDER_CALLBACK} (placeholder; polling for result)")
+        return replace(
+            query, body={**query.body, "callback": PLACEHOLDER_CALLBACK}
+        ), None
+
+    assert session is not None  # a non-poll mode is only returned when a session exists
+    token, callback_url = session.callback_for(mode)
+    console.print(f"Callback: {callback_url}")
+    return replace(query, body={**query.body, "callback": callback_url}), token
+
+
+def _await_callback_result(
+    session: CallbackSession, token: str, ack: httpx.Response, elapsed: float
+) -> tuple[httpx.Response, Literal["ok", "timeout"], float]:
+    """Block on the receiver for the service's callback POST, then wrap it."""
+    start = time.monotonic()
+    with console.status("Awaiting callback..."):
+        console.print(f"Awaiting callback (up to {CONFIG.timeout} s)...")
+        raw = session.wait(token, CONFIG.timeout)
+    elapsed += time.monotonic() - start
+
+    if raw is None:
+        console.print("Callback not received before timeout.")
+        return ack, "timeout", elapsed
+
+    response = make_synthetic_response(raw)
+    console.print(
+        f"total query elapsed time: {elapsed}s  ·  {format_size(len(response.content))}",
+        highlight=False,
+    )
+    return response, "ok", elapsed
 
 
 def _await_async_result(
@@ -354,13 +438,14 @@ def _await_async_result(
 def _poll_async_status(
     status_url: str, response: httpx.Response, body: dict[str, Any], elapsed: float
 ) -> tuple[httpx.Response, dict[str, Any], float, int, bool]:
-    """Poll every 10s while the job is Accepted/Queued/Running; stop on finish/timeout.
+    """Poll every 10s while Accepted/Queued/Running (tolerating early 404s); stop on finish/timeout.
 
     Returns the latest response and body, the accumulated elapsed time and its
     uncertainty, and whether polling timed out.
     """
     status = body["status"]
     uncertainty = 0
+    not_found = 0
     with console.status("Polling status endpoint every 10s...") as task_status:
         deadline = time.time() + CONFIG.timeout
         attempt = 0
@@ -371,13 +456,24 @@ def _poll_async_status(
                 return response, body, elapsed, uncertainty, True
 
             if attempt > 0:
-                time.sleep(10)
-                elapsed += 10
-                uncertainty = 10  # Could have finished any time in interval
+                # 404 retries back off quickly (1s, 2s, ...); normal polls wait 10s.
+                wait = not_found or 10
+                time.sleep(wait)
+                elapsed += wait
+                uncertainty = wait
 
             attempt += 1
             task_status.update(f"Polling status endpoint every 10s...({attempt})")
             response = CLIENT.get(status_url)
+            if response.status_code == httpx.codes.NOT_FOUND:
+                not_found += 1
+                if not_found <= _MAX_STATUS_NOT_FOUND:
+                    console.print(
+                        f"Status not stored yet (404); retry {not_found}/{_MAX_STATUS_NOT_FOUND}"
+                    )
+                    continue
+            else:
+                not_found = 0
             response.raise_for_status()
             body = cast(dict[str, Any], response.json())
             status = body["status"]

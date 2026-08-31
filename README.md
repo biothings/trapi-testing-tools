@@ -8,6 +8,9 @@ Install a JSON viewer for inspecting responses. The default is fx:
 [https://fx.wtf/install](https://fx.wtf/install). You can use different viewers (such as
 [jless](https://jless.io/)), see [Configuring JSON viewer](#configuring-json-viewer).
 
+
+**Optional:** install [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) (e.g. `brew install cloudflared`) to receive `/asyncquery` callbacks from **remote** services via a tunnel (see [Async queries](#async-queries-asyncquery-and-callbacks)). It's not required — without it, async testing against remote services automatically falls back to status polling.
+
 This project uses uv for package/dependency management. Install instructions:
 [https://docs.astral.sh/uv/getting-started/installation/](https://docs.astral.sh/uv/getting-started/installation/)
 
@@ -248,3 +251,67 @@ viewer: jless
 
 > [!NOTE] The viewer is only used for JSON responses. Non-JSON responses fall back to
 > `less`
+
+## Async queries (`/asyncquery`) and callbacks
+
+For `/asyncquery` endpoints, TTT receives the service's callback directly rather than
+relying on `/asyncquery_status` polling (services increasingly discard the response
+after firing the callback). It stands up a throwaway local HTTP receiver for the run
+and injects a per-query `callback` URL into the request body — **unless the query
+already specifies a `callback`, in which case that one is respected and TTT falls back
+to polling.**
+
+How the receiver is reached is controlled by `callback.mode`, overridable per run with
+`--callback-mode` (`--cb`):
+
+- **`auto`** (default) — direct `127.0.0.1` callback for local (loopback/private)
+  targets; a [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
+  quick tunnel for remote targets. Falls back to polling if cloudflared isn't
+  installed.
+- **`direct`** — always advertise the local receiver directly.
+- **`tunnel`** — always use a cloudflared quick tunnel.
+- **`poll`** — legacy behavior: poll `/asyncquery_status`, then fetch `response_url`.
+
+For tunnel mode, the receiver + tunnel run in a small **shared background daemon**: the
+**first** run starts it and all later runs (any shell) **reuse** it, so you create one
+tunnel total rather than one per run — which also avoids Cloudflare rate-limiting. It
+persists in the background and shuts itself down after an idle period. Manage it with:
+
+```bash
+tt tunnel         # show status (and, in a terminal, offer to start/stop it)
+tt tunnel start   # start/prewarm the tunnel now
+tt tunnel stop    # stop it
+```
+
+> [!NOTE]
+> **TLS-intercepting networks / VPNs.** Some corporate networks (or VPNs) intercept
+> TLS to `api.trycloudflare.com`, which stops cloudflared from *creating* a tunnel — TTT
+> then falls back to polling. A tunnel *already established* survives the VPN coming up,
+> so the workaround is: `tt tunnel start` with the VPN off, then connect the VPN and run
+> `tt test … --cb tunnel` (it reuses the running tunnel).
+
+> [!NOTE]
+> The daemon is global and shared across checkouts. Concurrent runs are isolated by
+> per-request tokens, but if you're developing TTT itself and switch to a branch that
+> changes the callback protocol, run `tt tunnel stop` first so the next run respawns
+> the daemon with that branch's code.
+>
+> If a tunnel reports as unavailable, the daemon logs why (including cloudflared's own
+> output) to `tunnel-daemon.log` in the platform state directory.
+
+```yaml
+callback:
+  mode: auto            # auto | direct | tunnel | poll
+  host: 127.0.0.1       # advertised host for direct mode (e.g. host.docker.internal on Docker Desktop)
+  bind: 127.0.0.1       # receiver bind address (0.0.0.0 to reach from a container)
+  port: 0               # 0 = OS-assigned ephemeral port
+  cloudflared_path: cloudflared
+```
+
+> [!NOTE]
+> `tunnel`/remote `auto` requires the `cloudflared` binary on your `PATH`
+> (`brew install cloudflared`). Quick tunnels are debug-grade (no uptime guarantee,
+> fresh URL per run) — fine for interactive use — and Cloudflare's Free/Pro plans cap
+> the callback body at 100 MB, so very large remote responses may need `mode: poll`.
+> A locally-run service in Docker may need `host: host.docker.internal` (Docker
+> Desktop) or `bind: 0.0.0.0`.

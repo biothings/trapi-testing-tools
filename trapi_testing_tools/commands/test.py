@@ -5,6 +5,7 @@ import typer
 from click.core import ParameterSource
 from rich.console import Console
 
+from trapi_testing_tools.callback import CallbackMode
 from trapi_testing_tools.commands.utils import (
     set_environment,
     set_output_modes,
@@ -181,6 +182,15 @@ def test(  # noqa: PLR0913
             "override the remembered ones.",
         ),
     ] = False,
+    callback_mode: Annotated[
+        CallbackMode | None,
+        typer.Option(
+            "--callback-mode",
+            "--cb",
+            help="How async /asyncquery results are received (overrides config): "
+            "auto, tunnel, direct, or poll.",
+        ),
+    ] = None,
 ) -> None:
     """Run one or more queries against one or more environments."""
     used_interactive = False
@@ -237,6 +247,8 @@ def test(  # noqa: PLR0913
             opts.append("-S")
         if pipe is not None:
             opts.append(f"-p {pipe.value}")
+        if callback_mode is not None:
+            opts.append(f"--cb {callback_mode.value}")
         console.print(
             f"\\[Hint] Re-run this command more quickly using: tt test {' '.join(opts)} {' '.join(str(q.relative_to(Path.cwd())) for q in queries)}"
             " (or just: tt test -R)",
@@ -253,6 +265,7 @@ def test(  # noqa: PLR0913
         save,
         debug,
         pipe,
+        callback_mode=callback_mode,
     )
 
     if not passed:
