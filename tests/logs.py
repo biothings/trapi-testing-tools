@@ -17,7 +17,9 @@ class NoErrorLogs(Test):
         model = trapi.parse_or_fail(response)
         if isinstance(model, TestResult):
             return model
-        error_logs = [log.message for log in model.logs if "ERROR" in (log.level or "")]
+        error_logs = [
+            log.message for log in (model.logs or []) if "ERROR" in (log.level or "")
+        ]
         return TestResult(
             len(error_logs) == 0, error_logs if len(error_logs) > 0 else None
         )
@@ -32,7 +34,9 @@ class NoDebugLogs(Test):
         model = trapi.parse_or_fail(response)
         if isinstance(model, TestResult):
             return model
-        debug_logs = [log.message for log in model.logs if "DEBUG" in (log.level or "")]
+        debug_logs = [
+            log.message for log in (model.logs or []) if "DEBUG" in (log.level or "")
+        ]
         return TestResult(
             len(debug_logs) == 0, debug_logs if len(debug_logs) > 0 else None
         )
@@ -48,7 +52,9 @@ class LogOneAPI(Test):
         if isinstance(model, TestResult):
             return model
 
-        has_log = any("(1) unique API" in (log.message or "") for log in model.logs)
+        has_log = any(
+            "(1) unique API" in (log.message or "") for log in (model.logs or [])
+        )
         return TestResult(
             has_log,
             "Missing log stating single unique API used" if not has_log else None,
@@ -71,7 +77,7 @@ class MissingIDLog(Test):
                 r"Specified SmartAPI ID(.*) is either invalid or missing.",
                 log.message or "",
             )
-            for log in model.logs
+            for log in (model.logs or [])
         )
         return TestResult(
             has_log,
@@ -93,7 +99,7 @@ class FoundCacheLog(Test):
 
         has_log = any(
             re.search(r"\([1-9][0-9]*\) cached qEdges", log.message or "")
-            for log in model.logs
+            for log in (model.logs or [])
         )
         return TestResult(has_log, None if has_log else "No logs report cached qEdges.")
 
@@ -109,7 +115,8 @@ class CacheBypassLog(Test):
             return model
 
         has_log = any(
-            "REDIS cache is not enabled." in (log.message or "") for log in model.logs
+            "REDIS cache is not enabled." in (log.message or "")
+            for log in (model.logs or [])
         )
         return TestResult(
             has_log, None if has_log else "No logs indicating cache bypass."
@@ -128,7 +135,7 @@ class NoCacheHits(Test):
 
         cache_hits = [
             log
-            for log in model.logs
+            for log in (model.logs or [])
             if re.search(r"\([1-9][0-9]*\) cached qEdges", log.message or "")
         ]
 
@@ -157,7 +164,7 @@ class DryRunLog(Test):
         has_log = any(
             "Running dryrun of query, no API calls will be performed. Actual query execution order may vary based on API responses received."
             in (log.message or "")
-            for log in model.logs
+            for log in (model.logs or [])
         )
 
         return TestResult(has_log, "Missing dryrun log" if not has_log else None)

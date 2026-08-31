@@ -1,8 +1,6 @@
 from typing import override
 
 import httpx
-from translator_tom.models.analysis import Analysis, PathfinderAnalysis
-from translator_tom.models.query_graph import PathfinderQueryGraph
 
 from tests import trapi
 from tests.base_test import Test, TestResult
@@ -72,24 +70,16 @@ class ResultsBindQueryEdges(Test):
         if query_graph is None:
             return TestResult(True, "no query_graph")
 
-        pathfinder = isinstance(query_graph, PathfinderQueryGraph)
-        declared = (query_graph.paths if pathfinder else query_graph.edges).keys()
+        # pathfinder iff the graph has `paths` (1.6 PathfinderQueryGraph or 2.0 unified)
+        paths = getattr(query_graph, "paths", None)
+        pathfinder = bool(paths)
+        declared = (paths if pathfinder else query_graph.edges).keys()
         kind = "path" if pathfinder else "edge"
+        binding_attr = "path_bindings" if pathfinder else "edge_bindings"
 
-        def bound(analysis: Analysis | PathfinderAnalysis) -> set[str]:
-            if pathfinder:
-                keys = (
-                    analysis.path_bindings.keys()
-                    if isinstance(analysis, PathfinderAnalysis)
-                    else ()
-                )
-            else:
-                keys = (
-                    analysis.edge_bindings.keys()
-                    if isinstance(analysis, Analysis)
-                    else ()
-                )
-            return set(keys)
+        def bound(analysis: object) -> set[str]:
+            bindings = getattr(analysis, binding_attr, None)
+            return set(bindings.keys()) if bindings else set()
 
         # A qedge/qpath is required in every analysis iff some analysis binds it.
         analyses = [

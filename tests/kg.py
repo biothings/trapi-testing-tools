@@ -1,13 +1,24 @@
 from dataclasses import dataclass, field
-from typing import override
+from typing import Any, override
 
 import httpx
 from translator_tom import CURIE, AuxGraphID, EdgeID  # version-agnostic ID types
-from translator_tom.v1_6 import Analysis, Message
 
 from tests import trapi
 from tests.base_test import Test, TestResult
 from tests.params import Comparison, CountTest, count_result
+
+
+def binding_ids(bindings: Any) -> list[str]:
+    """The ids in a node/edge/path binding-map value, across TRAPI versions.
+
+    TRAPI 2.0 models each binding as a single object with an `ids` list; 1.6 models it as
+    a list of bindings each with a single `id`.
+    """
+    ids = getattr(bindings, "ids", None)
+    if ids is not None:
+        return list(ids)
+    return [binding.id for binding in bindings]
 
 
 class NodeCount(CountTest):
@@ -79,15 +90,10 @@ class HasKLAT(Test):
         if isinstance(model, TestResult):
             return model
 
-        required = {"biolink:knowledge_level", "biolink:agent_type"}
         kg = model.message.knowledge_graph
         edges = kg.edges if kg else {}
         missing = [
-            edge_id
-            for edge_id, edge in edges.items()
-            if not required.issubset(
-                {attr.attribute_type_id for attr in (edge.attributes or [])}
-            )
+            edge_id for edge_id, edge in edges.items() if not _edge_has_klat(edge)
         ]
         return TestResult(len(missing) == 0, missing or None)
 
@@ -113,6 +119,20 @@ class HasPrimaryKnowledgeSource(Test):
             )
         ]
         return TestResult(len(missing) == 0, missing or None)
+
+
+def _edge_has_klat(edge: Any) -> bool:
+    """Whether an edge carries knowledge_level and agent_type, across TRAPI versions.
+
+    TRAPI 2.0 lifts KL/AT to required top-level Edge fields; 1.6 carries them as
+    `biolink:knowledge_level` / `biolink:agent_type` entries in `attributes`.
+    """
+    if getattr(edge, "knowledge_level", None) is not None:  # 2.0: top-level
+        return getattr(edge, "agent_type", None) is not None
+    required = {"biolink:knowledge_level", "biolink:agent_type"}
+    return required.issubset(
+        {attr.attribute_type_id for attr in (edge.attributes or [])}
+    )
 
 
 @dataclass
@@ -154,7 +174,7 @@ class _ReachabilityWalker:
     present in the message are recorded as missing rather than followed.
     """
 
-    def __init__(self, message: Message) -> None:
+    def __init__(self, message: Any) -> None:
         kg = message.knowledge_graph
         self._message = message
         self._nodes = kg.nodes if kg else {}
@@ -180,19 +200,22 @@ class _ReachabilityWalker:
     def _setup(self) -> None:
         """Queue directly-bound edges and record directly-bound nodes/aux graphs."""
         for result in self._message.results_list:
-            for binding_set in result.node_bindings.values():
-                for binding in binding_set:
-                    self._bind_node(binding.id)
+            for bindings in result.node_bindings.values():
+                for node_id in binding_ids(bindings):
+                    self._bind_node(node_id)
             for analysis in result.analyses:
                 for aux_id in analysis.support_graphs_list:
                     self._follow_aux_graph(aux_id)
-                if isinstance(analysis, Analysis):
-                    for binding_set in analysis.edge_bindings.values():
-                        self._queue.extend(binding.id for binding in binding_set)
-                else:
-                    for binding_set in analysis.path_bindings.values():
-                        for binding in binding_set:
-                            self._follow_aux_graph(binding.id)
+                # getattr covers 1.6's split Analysis/PathfinderAnalysis and 2.0's unified one
+                edge_bindings = getattr(analysis, "edge_bindings", None)
+                if edge_bindings:
+                    for bindings in edge_bindings.values():
+                        self._queue.extend(binding_ids(bindings))
+                path_bindings = getattr(analysis, "path_bindings", None)
+                if path_bindings:
+                    for bindings in path_bindings.values():
+                        for aux_id in binding_ids(bindings):
+                            self._follow_aux_graph(aux_id)
 
     def _check(self) -> None:
         """Follow queued edges, binding nodes and support graphs."""
@@ -211,7 +234,7 @@ class _ReachabilityWalker:
             self.reach.edges.add(edge_id)
             self._bind_node(edge.subject)
             self._bind_node(edge.object)
-            for aux_id in edge.support_graphs:
+            for aux_id in edge.support_graphs or []:
                 self._follow_aux_graph(aux_id)
 
     def walk(self) -> _Reachability:
@@ -221,7 +244,7 @@ class _ReachabilityWalker:
         return self.reach
 
 
-def _walk_reachable(message: Message) -> _Reachability:
+def _walk_reachable(message: Any) -> _Reachability:
     """Walk a message's results into its knowledge graph (see `_ReachabilityWalker`)."""
     return _ReachabilityWalker(message).walk()
 

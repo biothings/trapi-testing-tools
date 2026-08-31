@@ -34,7 +34,7 @@ from translator_tom import TOMBase
 
 from tests.base_test import Test
 from trapi_testing_tools.config import CONFIG
-from trapi_testing_tools.types import HTTPMethod, Query, TestType
+from trapi_testing_tools.types import HTTPMethod, Query
 
 SYNC_BASIC_CLIENT = httpx.Client(follow_redirects=True, timeout=None)
 ASYNC_BASIC_CLIENT = httpx.AsyncClient(follow_redirects=True, timeout=None)
@@ -223,14 +223,26 @@ def inject_default_submitter(query: Query) -> Query:
     return replace(query, body={"submitter": CONFIG.submitter, **body})
 
 
+def _query_version(query_module: ModuleType) -> str:
+    """The TRAPI version a file targets: its `trapi_version` global (default ``"1.6"``)."""
+    version = getattr(query_module, "trapi_version", "1.6")
+    if version not in ("1.6", "2.0"):
+        raise AttributeError(
+            f"Query trapi_version must be '1.6' or '2.0', got {version!r}."
+        )
+    return version
+
+
 def parse_query(query_module: ModuleType) -> list[Query]:
     """Check that query has required options."""
     queries: list[Query]
+    version = _query_version(query_module)
 
     if hasattr(query_module, "steps"):
-        # Normalize in case of TOM object
+        # Normalize TOM objects; the module-level trapi_version governs every step.
         queries = [
-            replace(step, body=serialize_body(step.body)) for step in query_module.steps
+            replace(step, body=serialize_body(step.body), trapi_version=version)
+            for step in query_module.steps
         ]
     else:
         method = getattr(query_module, "method", "GET")
@@ -271,6 +283,7 @@ def parse_query(query_module: ModuleType) -> list[Query]:
                 headers=cast(dict[str, str], headers),
                 body=body,
                 tests=cast(list[type[Test]], tests),
+                trapi_version=cast(Literal["1.6", "2.0"], version),
             )
         ]
 

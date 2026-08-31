@@ -38,3 +38,5 @@ class Query:
     headers: dict[str, str] = field(default_factory=dict)
     body: "dict[str, Any] | list[Any] | TOMBase | None" = None
     tests: list[type[Test]] | None = None
+    trapi_version: Literal["1.6", "2.0"] = "1.6"
+    """TRAPI version the response is parsed/validated against (see `trapi_models`)."""

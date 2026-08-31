@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import typer
-from translator_tom.v1_6 import Response
+
+# Any: an analysis gets whichever version's Response its dir (v1_6/ or v2_0/) implies
+Response = Any
 
 AnalysisOutput = dict | list
 """A JSON-serializable analysis result."""
