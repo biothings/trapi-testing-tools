@@ -1,4 +1,5 @@
 from tests.battery import standard_battery_2_0
+from tests.constraints import EdgesSatisfyQualifiers
 
 # 2.0 constraints.qualifiers: {type_id: value} pairs AND'd; SmallMolecule -affects-> EGFR
 trapi_version = "2.0"
@@ -30,4 +31,12 @@ body = {
         }
     },
 }
-tests = standard_battery_2_0()
+tests = [
+    *standard_battery_2_0(),
+    EdgesSatisfyQualifiers.expect(
+        {
+            "biolink:object_aspect_qualifier": "activity_or_abundance",
+            "biolink:object_direction_qualifier": "increased",
+        }
+    ),
+]

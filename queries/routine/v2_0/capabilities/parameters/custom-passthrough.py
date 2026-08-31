@@ -24,4 +24,7 @@ body = {
         }
     },
 }
-tests = [*standard_battery_2_0(), ParametersEchoed]
+tests = [
+    *standard_battery_2_0(),
+    ParametersEchoed.expect(custom_parameter="example-value"),
+]

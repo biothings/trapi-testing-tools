@@ -24,4 +24,4 @@ body = {
         }
     },
 }
-tests = [*standard_battery_2_0(), ParametersEchoed]
+tests = [*standard_battery_2_0(), ParametersEchoed.expect(timeout=300)]

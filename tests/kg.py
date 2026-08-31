@@ -99,7 +99,7 @@ class HasKLAT(Test):
 
 
 class HasPrimaryKnowledgeSource(Test):
-    """all edges have a primary_knowledge_source."""
+    """all edges have exactly one primary_knowledge_source."""
 
     @override
     @staticmethod
@@ -110,15 +110,16 @@ class HasPrimaryKnowledgeSource(Test):
 
         kg = model.message.knowledge_graph
         edges = kg.edges if kg else {}
-        missing = [
-            edge_id
-            for edge_id, edge in edges.items()
-            if not any(
+        # Spec: every Edge reports one and only one primary_knowledge_source.
+        violations = []
+        for edge_id, edge in edges.items():
+            primaries = sum(
                 source.resource_role == "primary_knowledge_source"
                 for source in edge.sources
             )
-        ]
-        return TestResult(len(missing) == 0, missing or None)
+            if primaries != 1:
+                violations.append(f"{edge_id}: {primaries} primary_knowledge_source(s)")
+        return TestResult(len(violations) == 0, violations or None)
 
 
 def _edge_has_klat(edge: Any) -> bool:

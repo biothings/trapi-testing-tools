@@ -34,8 +34,8 @@ def standard_battery() -> list[type[Test]]:
 def standard_battery_2_0() -> list[type[Test]]:
     """The standard battery for a TRAPI 2.0 lookup query.
 
-    Adds `trapi.Structural`/`trapi.Semantic` (the 2.0 null-freedom / minItems / `{ids}`
-    binding-shape gate) and `kg.HasKLAT` (KL/AT are required top-level Edge fields in 2.0).
+    `standard_battery` plus `trapi.Semantic` (the 2.0 null-freedom / minItems / `{ids}`
+    binding-shape gate); every integrity check it folds is 2.0-valid unchanged.
     """
     return [
         http.Status,
@@ -44,8 +44,17 @@ def standard_battery_2_0() -> list[type[Test]]:
         kg.NodeCount,
         kg.EdgeCount,
         results.ResultCount,
-        kg.AllKGItemsBound,
-        kg.BindingsResolveToKG,
-        kg.HasKLAT,
-        logs.NoErrorLogs,
+        composite(
+            [
+                kg.AllKGItemsBound,
+                kg.BindingsResolveToKG,
+                kg.NoOrphanAuxGraphs,
+                kg.HasKLAT,
+                kg.HasPrimaryKnowledgeSource,
+                results.ResultsBindQueryNodes,
+                results.ResultsBindQueryEdges,
+                logs.NoErrorLogs,
+            ],
+            "integrity checks",
+        ),
     ]

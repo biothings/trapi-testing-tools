@@ -105,18 +105,80 @@ class EdgesSatisfySources(Test):
         )
 
 
-class ParametersEchoed(Test):
-    """response echoes query parameters."""
+class EdgesSatisfyQualifiers(Test):
+    """kg edges satisfy the qualifiers constraint."""
 
     @override
     @staticmethod
-    def test(response: httpx.Response) -> TestResult:
+    def test(
+        response: httpx.Response,
+        *,
+        sets: tuple[tuple[tuple[str, str], ...], ...] = (),
+    ) -> TestResult:
         model = trapi.parse_or_fail(response)
         if isinstance(model, TestResult):
             return model
+
+        # A constraint's qualifier-sets are OR'd; the pairs within a set are AND'd (literal match).
+        required_sets = [dict(pairs) for pairs in sets]
+        violations: list[str] = []
+        for edge_id, edge in _kg_edges(model).items():
+            edge_quals = {
+                qual.qualifier_type_id: qual.qualifier_value
+                for qual in (edge.qualifiers or [])
+            }
+            satisfied = any(
+                all(edge_quals.get(tid) == value for tid, value in required.items())
+                for required in required_sets
+            )
+            if not satisfied:
+                violations.append(f"{edge_id}: qualifiers={edge_quals}")
+        return TestResult(len(violations) == 0, violations or None)
+
+    @classmethod
+    def expect(cls, *sets: dict[str, str]) -> type[Test]:
+        """A variant asserting every KG edge satisfies ≥1 qualifier-set (OR of AND-ed pairs)."""
+        frozen = tuple(tuple(one_set.items()) for one_set in sets)
+        listing = " OR ".join(
+            "{" + ", ".join(f"{k}={v}" for k, v in one_set.items()) + "}"
+            for one_set in sets
+        )
+        return bind(cls, name=f"edges satisfy qualifiers {listing}", sets=frozen)
+
+
+class ParametersEchoed(Test):
+    """response echoes the query parameters."""
+
+    @override
+    @staticmethod
+    def test(
+        response: httpx.Response, *, expected: tuple[tuple[str, Any], ...] = ()
+    ) -> TestResult:
+        model = trapi.parse_or_fail(response)
+        if isinstance(model, TestResult):
+            return model
+
         params = getattr(model, "parameters", None)
-        passed = bool(params)
-        return TestResult(passed, None if passed else "response has no parameters")
+        echoed = params.to_dict() if params is not None else {}
+        if not expected:
+            return TestResult(
+                bool(echoed), None if echoed else "response has no parameters"
+            )
+
+        # Spec: the server MUST echo the parameters it received, so each sent pair must reappear.
+        missing = [
+            f"{key}={value!r} (got {echoed.get(key, '<absent>')!r})"
+            for key, value in expected
+            if echoed.get(key) != value
+        ]
+        return TestResult(len(missing) == 0, missing or None)
+
+    @classmethod
+    def expect(cls, **expected: Any) -> type[Test]:
+        """A variant asserting the response echoes each given parameter key/value."""
+        pairs = tuple(expected.items())
+        listing = ", ".join(f"{k}={v!r}" for k, v in pairs)
+        return bind(cls, name=f"parameters echo {{{listing}}}", expected=pairs)
 
 
 class CollatedResultsUnique(Test):

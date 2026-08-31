@@ -24,4 +24,7 @@ body = {
         }
     },
 }
-tests = [http.Status, ParametersEchoed]
+tests = [
+    http.Status,
+    ParametersEchoed.expect(log_level="INFO", bypass_cache=True, timeout=300),
+]
