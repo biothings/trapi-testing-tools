@@ -67,12 +67,14 @@ def set_queries(
         ]
         used_interactive = True
 
-    # Recursively obtain queries from directory args
+    # recurse_symlinks so profile symlink-dirs expand; de-dup since profiles overlap (ara ⊃ lookup)
     expanded: list[Path] = []
     for path in queries:
         if path.is_dir():
             matches = sorted(
-                p.resolve() for p in path.rglob("*.py") if "__pycache__" not in p.parts
+                p.resolve()
+                for p in path.rglob("*.py", recurse_symlinks=True)
+                if "__pycache__" not in p.parts
             )
             if not matches:
                 console.print(
@@ -82,7 +84,7 @@ def set_queries(
             expanded.extend(matches)
         else:
             expanded.append(path)
-    queries = expanded
+    queries = list(dict.fromkeys(expanded))
 
     if len(queries) == 0:
         raise typer.Abort()
@@ -161,15 +163,20 @@ def set_output_modes(  # noqa: PLR0913
     return view_mode, save_mode
 
 
-def discover_analyses() -> dict[str, AnalysisClass]:
-    """Import every analysis module and collect the declared analyses by name."""
+def discover_analyses(version: str = "1.6") -> dict[str, AnalysisClass]:
+    """Import the `analysis/v<version>/` modules and collect their analyses by name.
+
+    Analyses are split by TRAPI version (`analysis/v1_6/`, `analysis/v2_0/`); discovery
+    is scoped to one version so same-named classes across versions don't collide.
+    """
     found = dict[str, AnalysisClass]()
-    base_dir = Path(analysis_list.__path__[0])
-    for path in base_dir.rglob("**/*.py"):
+    root = Path(analysis_list.__path__[0])
+    version_dir = root / f"v{version.replace('.', '_')}"
+    for path in version_dir.rglob("*.py"):
         if path.stem in ("__init__", "base_analysis"):
             continue
         module_name = "analysis." + ".".join(
-            path.relative_to(base_dir).with_suffix("").parts
+            path.relative_to(root).with_suffix("").parts
         )
         try:
             module = importlib.import_module(module_name)
@@ -190,9 +197,11 @@ def discover_analyses() -> dict[str, AnalysisClass]:
     return found
 
 
-def set_analyses(names: list[str] | None) -> tuple[list[AnalysisClass], bool]:
-    """Given the command arguments, ensure analyses are selected."""
-    available = discover_analyses()
+def set_analyses(
+    names: list[str] | None, version: str = "1.6"
+) -> tuple[list[AnalysisClass], bool]:
+    """Given the command arguments, ensure analyses are selected (for `version`)."""
+    available = discover_analyses(version)
     used_interactive = False
 
     if names is None:

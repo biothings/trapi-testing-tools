@@ -2,22 +2,23 @@ import sys
 from contextlib import redirect_stdout
 from pathlib import Path
 from sys import stderr
+from typing import Any
 
 import typer
 from InquirerPy.prompts.confirm import ConfirmPrompt
 from rich.console import Console
 from rich.text import Text
-from translator_tom.v1_6 import Response  # TTT targets TRAPI 1.6
 
 from analysis.base_analysis import AnalysisClass, ParametrizedAnalysis
+from trapi_testing_tools.trapi_models import models
 from trapi_testing_tools.types import OutputModes
 from trapi_testing_tools.utils import IndentedBlock, handle_output, serialize_body
 
 console = Console(stderr=True)
 
 
-def load_response(file: Path | None) -> Response:
-    """Load a TRAPI Response from a file, or from stdin when no file is given."""
+def load_response(file: Path | None) -> Any:
+    """Load a TRAPI Response (for the active TRAPI version), from a file or stdin."""
     source = "stdin" if file is None else str(file)
     try:
         data = file.read_bytes() if file is not None else sys.stdin.buffer.read()
@@ -30,7 +31,7 @@ def load_response(file: Path | None) -> Response:
         raise typer.Exit(1)
 
     try:
-        return Response.from_json(data)
+        return models().Response.from_json(data)
     except Exception as error:
         console.print(
             f"ERROR: {source} is not a valid TRAPI response: {error!r}", style="red"
@@ -39,7 +40,7 @@ def load_response(file: Path | None) -> Response:
 
 
 def run_analyses(
-    response: Response,
+    response: Any,
     analyses: list[AnalysisClass],
     forwarded_args: list[str],
     output_modes: OutputModes,
@@ -56,7 +57,7 @@ def run_analyses(
 
 def manage_analysis(
     analysis: AnalysisClass,
-    response: Response,
+    response: Any,
     forwarded_args: list[str],
     output_modes: OutputModes,
     save_path: Path | None,

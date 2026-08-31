@@ -1,83 +1,86 @@
 """TOM-aware helpers for tests, backed by translator_tom.
 
-Responses are parsed into TOM models at most once each (memoized per response
-object).
+Responses parse to TOM models once per (response, version), with the namespace + validator
+resolved from the active `current_trapi_version`, so tests stay version-agnostic.
 """
 
 from __future__ import annotations
 
-from typing import override
+from typing import Any, override
 from weakref import WeakKeyDictionary
 
 import httpx
-from translator_tom.v1_6 import MetaKnowledgeGraph, Response
-from translator_tom.v1_6.validation import semantic_validate
 
 from tests.base_test import Test, TestResult
+from trapi_testing_tools.trapi_models import (
+    current_trapi_version,
+    models,
+    semantic_validate,
+)
 
 
 class TrapiParseError(Exception):
     """Raised when a response body cannot be parsed as the expected TRAPI model."""
 
 
-# Cache parsed model or parse error per response to avoid slow re-parsing.
-_TRAPI_CACHE: WeakKeyDictionary[httpx.Response, Response | TrapiParseError] = (
-    WeakKeyDictionary()
-)
-_METAKG_CACHE: WeakKeyDictionary[
-    httpx.Response, MetaKnowledgeGraph | TrapiParseError
-] = WeakKeyDictionary()
+# Cache parsed model or parse error per (response, version) to avoid slow re-parsing.
+_TRAPI_CACHE: WeakKeyDictionary[httpx.Response, dict[str, Any]] = WeakKeyDictionary()
+_METAKG_CACHE: WeakKeyDictionary[httpx.Response, dict[str, Any]] = WeakKeyDictionary()
 
 
-def as_trapi(response: httpx.Response) -> Response:
-    """Parse a response into a TOM `Response`, memoized per response.
+def as_trapi(response: httpx.Response) -> Any:
+    """Parse a response into a TOM `Response` for the active version, memoized.
 
     Raises:
         TrapiParseError: if the body is not valid TRAPI (also cached and re-raised).
     """
-    cached = _TRAPI_CACHE.get(response)
+    version = current_trapi_version.get()
+    per_version = _TRAPI_CACHE.setdefault(response, {})
+    cached = per_version.get(version)
     if cached is not None:
         if isinstance(cached, TrapiParseError):
             raise cached
         return cached
 
     try:
-        parsed = Response.from_json(response.content)
+        parsed = models(version).Response.from_json(response.content)
     except Exception as error:
-        parse_error = TrapiParseError(f"response is not valid TRAPI: {error}")
-        _TRAPI_CACHE[response] = parse_error
+        parse_error = TrapiParseError(f"response is not valid TRAPI {version}: {error}")
+        per_version[version] = parse_error
         raise parse_error from error
 
-    _TRAPI_CACHE[response] = parsed
+    per_version[version] = parsed
     return parsed
 
 
-def as_metakg(response: httpx.Response) -> MetaKnowledgeGraph:
-    """Parse a response into a TOM `MetaKnowledgeGraph`, memoized per response.
+def as_metakg(response: httpx.Response) -> Any:
+    """Parse a response into a TOM `MetaKnowledgeGraph` for the active version, memoized.
 
     Raises:
         TrapiParseError: if the body is not a valid meta_knowledge_graph.
     """
-    cached = _METAKG_CACHE.get(response)
+    version = current_trapi_version.get()
+    per_version = _METAKG_CACHE.setdefault(response, {})
+    cached = per_version.get(version)
     if cached is not None:
         if isinstance(cached, TrapiParseError):
             raise cached
         return cached
 
     try:
-        parsed = MetaKnowledgeGraph.from_json(response.content)
+        parsed = models(version).MetaKnowledgeGraph.from_json(response.content)
     except Exception as error:
         parse_error = TrapiParseError(
-            f"response is not a valid meta_knowledge_graph: {error}"
+            f"response is not a valid meta_knowledge_graph ({version}): {error}"
         )
-        _METAKG_CACHE[response] = parse_error
+        per_version[version] = parse_error
         raise parse_error from error
 
-    _METAKG_CACHE[response] = parsed
+    per_version[version] = parsed
     return parsed
 
 
-def parse_or_fail(response: httpx.Response) -> Response | TestResult:
+def parse_or_fail(response: httpx.Response) -> Any | TestResult:
     """Parse a TRAPI `Response` or produce a failed `TestResult`.
 
     Lets tests type-narrow to model, or fail early due to the parse fail.
@@ -90,7 +93,7 @@ def parse_or_fail(response: httpx.Response) -> Response | TestResult:
 
 def parse_metakg_or_fail(
     response: httpx.Response,
-) -> MetaKnowledgeGraph | TestResult:
+) -> Any | TestResult:
     """Parse a `MetaKnowledgeGraph` or produce a failed `TestResult`."""
     try:
         return as_metakg(response)

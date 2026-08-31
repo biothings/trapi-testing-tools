@@ -12,6 +12,7 @@ from trapi_testing_tools.commands.utils import (
     set_analyses,
     set_output_modes,
 )
+from trapi_testing_tools.trapi_models import use_version
 
 console = Console(stderr=True)
 stdout_console = Console()
@@ -35,6 +36,14 @@ def analyze(  # noqa: PLR0913
         bool,
         typer.Option("--list", "-l", help="List available analyses and exit."),
     ] = False,
+    trapi_version: Annotated[
+        str,
+        typer.Option(
+            "--trapi",
+            "-T",
+            help="TRAPI version to parse the response and select analyses for (1.6 or 2.0).",
+        ),
+    ] = "1.6",
     file: Annotated[
         Path | None,
         typer.Option(
@@ -83,8 +92,14 @@ def analyze(  # noqa: PLR0913
     Arguments after a `--` separator are forwarded to any parametrized analysis
     (e.g. `tt analyze PathCount -- --start <CURIE> --end <CURIE>`).
     """
+    if trapi_version not in ("1.6", "2.0"):
+        console.print(
+            f"--trapi must be '1.6' or '2.0', got {trapi_version!r}", style="red"
+        )
+        raise typer.Exit(1)
+
     if list_analyses:
-        available = discover_analyses()
+        available = discover_analyses(trapi_version)
         if not available:
             stdout_console.print("No analyses discovered.")
             raise typer.Exit()
@@ -114,7 +129,7 @@ def analyze(  # noqa: PLR0913
         )
         raise typer.Exit(1)
 
-    selected, _ = set_analyses(names or None)
+    selected, _ = set_analyses(names or None, trapi_version)
 
     # Shortcut to show inner layer help without response checking
     if any(arg in ("--help", "-h") for arg in forwarded_args):
@@ -130,5 +145,6 @@ def analyze(  # noqa: PLR0913
         raise typer.Exit()
 
     output_modes = set_output_modes(view, save, no_save, pipe, selected)
-    response = load_response(file)
-    run_analyses(response, selected, forwarded_args, output_modes, save)
+    with use_version(trapi_version):
+        response = load_response(file)
+        run_analyses(response, selected, forwarded_args, output_modes, save)

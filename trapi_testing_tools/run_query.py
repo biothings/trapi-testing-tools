@@ -29,6 +29,7 @@ from trapi_testing_tools.report import (
     emit_report,
     pre_run_failure,
 )
+from trapi_testing_tools.trapi_models import use_version
 from trapi_testing_tools.types import OutputModes, Query
 from trapi_testing_tools.utils import (
     IndentedBlock,
@@ -211,7 +212,8 @@ def manage_query(  # noqa: PLR0913
         tests_passed = True
         if step_ok and query.tests is not None:
             any_tests = True
-            n_passed, n_failed, outcomes = run_tests(query, run.response)
+            with use_version(query.trapi_version):
+                n_passed, n_failed, outcomes = run_tests(query, run.response)
             total_passed += n_passed
             total_failed += n_failed
             tests_passed = n_failed == 0
