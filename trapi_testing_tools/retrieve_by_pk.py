@@ -24,19 +24,27 @@ client = httpx.AsyncClient(follow_redirects=True, timeout=300)
 async def check_ars_pk(
     lvl: str, pk: str, status: progress.Progress
 ) -> dict[str, Any] | None:
-    """Check the ars for a given pk."""
-    response = await client.get(f"{CONFIG.environments['ars'][lvl]}/{pk}?trace=y")
+    """Check the ars for a given pk, skipping the level if it can't be reached."""
     task = status.add_task(f"Querying ARS {lvl.capitalize()}...")
 
-    if response.status_code == HTTPStatus.NOT_FOUND:
+    try:
+        response = await client.get(f"{CONFIG.environments['ars'][lvl]}/{pk}?trace=y")
+        response.raise_for_status()
+    except httpx.HTTPStatusError as error:
+        code = error.response.status_code
+        label = "404" if code == HTTPStatus.NOT_FOUND else f"skipped ({code})"
+        status.update(
+            task, description=f"[red]x[/] ARS {lvl.capitalize()} {label}", completed=1
+        )
+        return None
+    except httpx.HTTPError:
         status.update(
             task,
-            description=f"[red]x[/] ARS {lvl.capitalize()} 404",
+            description=f"[yellow]-[/] ARS {lvl.capitalize()} unreachable, skipped",
             completed=1,
         )
-        return
+        return None
 
-    response.raise_for_status()
     status.update(
         task,
         description=f"[green]✓[/] ARS {lvl.capitalize()} has response",
