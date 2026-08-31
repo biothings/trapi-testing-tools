@@ -21,23 +21,28 @@ from trapi_testing_tools.config import CONFIG
 from trapi_testing_tools.report import (
     PipeMode,
     QueryResult,
+    StepRecord,
     StepResult,
     StepRun,
     TestOutcome,
     build_query_result,
+    build_record,
     build_step,
     emit_report,
     pre_run_failure,
 )
 from trapi_testing_tools.trapi_models import use_version
-from trapi_testing_tools.types import OutputModes, Query
+from trapi_testing_tools.types import FollowUp, OutputModes, Query
 from trapi_testing_tools.utils import (
     IndentedBlock,
+    comment_console,
     console,
     format_size,
     handle_output,
+    inject_default_submitter,
     maybe_print_traceback,
     parse_query,
+    serialize_body,
 )
 
 CLIENT = httpx.Client(
@@ -179,9 +184,13 @@ def manage_query(  # noqa: PLR0913
     any_tests = False
     query_elapsed = 0.0
     final_response: httpx.Response | None = None
+    history: list[StepRecord] = []
 
-    for query in queries:
-        run = run_query(query, url, session)
+    for step in queries:
+        # A FollowUp is built from prior results; a build error becomes a no-response step.
+        query, run, bail_reason = _resolve_step(step, history, url)
+        if run is None:
+            run = run_query(query, url, session)
         final_response = run.response
         query_elapsed += run.elapsed
 
@@ -197,7 +206,7 @@ def manage_query(  # noqa: PLR0913
                     )
                 )
             console.pop_render_hook()
-            console.print("└ No Response", style="rule.line")
+            console.print(f"└ {bail_reason}", style="rule.line")
             result = (
                 build_query_result(
                     rel_path, env, steps, False, query_elapsed, len(queries) > 1
@@ -231,6 +240,8 @@ def manage_query(  # noqa: PLR0913
                     include_response=include_response,
                 )
             )
+
+        history.append(build_record(run, tests_passed, outcomes))
 
     console.pop_render_hook()
 
@@ -285,6 +296,53 @@ def _print_verdict(
         if total_passed > 0:
             message += f"[white] ─ [/][green]Passed[/] {total_passed}"
     console.print(f"└ {message}", style="rule.line", markup=True)
+
+
+def _build_followup(step: FollowUp, history: list[StepRecord]) -> Query:
+    """Materialize a `FollowUp` into a concrete `Query` from prior step results.
+
+    Mirrors `parse_query`'s tail on the built query (body serialization + submitter
+    injection) so a FollowUp-built request behaves like a static one.
+    """
+    if not history:
+        raise ValueError(
+            "A FollowUp cannot be the first step (no prior result to build from)."
+        )
+
+    with comment_console():
+        built = step.build(history[-1], history)
+
+    return inject_default_submitter(replace(built, body=serialize_body(built.body)))
+
+
+def _resolve_step(
+    step: Query, history: list[StepRecord], url: str
+) -> tuple[Query, StepRun | None, str]:
+    """Resolve a step to its concrete `Query`, deferring `run` unless a FollowUp failed.
+
+    Returns the query, a pre-built `StepRun` when a FollowUp's `build` raised (so the
+    caller's no-response path reports it) else ``None``, and the bail message to show.
+    """
+    if not isinstance(step, FollowUp):
+        return step, None, "No Response"
+    try:
+        return _build_followup(step, history), None, "No Response"
+    except Exception as error:
+        console.print(
+            f"[red]FollowUp {type(step).__name__}.build failed:[/] {error!r}",
+            markup=True,
+        )
+        maybe_print_traceback()
+        run = StepRun(
+            None,
+            "error",
+            None,
+            repr(error),
+            0.0,
+            url + (step.endpoint or ""),
+            step.method,
+        )
+        return step, run, f"FollowUp build failed: {error!r}"
 
 
 def run_query(
@@ -371,7 +429,9 @@ def _prepare_async_callback(
 
     mode = session.prepare(url) if session is not None else "poll"
     if mode == "poll":
-        console.print(f"Callback: {PLACEHOLDER_CALLBACK} (placeholder; polling for result)")
+        console.print(
+            f"Callback: {PLACEHOLDER_CALLBACK} (placeholder; polling for result)"
+        )
         return replace(
             query, body={**query.body, "callback": PLACEHOLDER_CALLBACK}
         ), None
