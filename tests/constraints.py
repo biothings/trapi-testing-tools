@@ -4,7 +4,8 @@ Constraint checks are literal membership checks (no Biolink hierarchy expansion)
 the exact values a component is expected to return.
 """
 
-from typing import override
+from collections import Counter
+from typing import Any, override
 
 import httpx
 
@@ -118,41 +119,52 @@ class ParametersEchoed(Test):
         return TestResult(passed, None if passed else "response has no parameters")
 
 
-class CollatedIntoSingleResult(Test):
-    """collate yields one result with a multi-id node binding."""
+class CollatedResultsUnique(Test):
+    """collate: no two results collapse onto the collated qnode.
+
+    Under COLLATE, matching ``qnode`` nodes fold into one result, so two results may not be
+    identical once ``qnode`` and its incident edges are set aside — what distinguishes results
+    is the rest of the graph: the other nodes *and* the edges connecting them.
+    """
 
     @override
     @staticmethod
-    def test(
-        response: httpx.Response, *, qnode: str = "", min_ids: int = 2
-    ) -> TestResult:
+    def test(response: httpx.Response, *, qnode: str = "") -> TestResult:
         model = trapi.parse_or_fail(response)
         if isinstance(model, TestResult):
             return model
 
-        results = model.message.results or []
-        if len(results) != 1:
-            return TestResult(False, f"expected 1 collated result, got {len(results)}")
+        query_graph = model.message.query_graph
+        qedges = query_graph.edges if query_graph and query_graph.edges else {}
+        incident = {
+            qeid for qeid, qe in qedges.items() if qnode in (qe.subject, qe.object)
+        }
 
-        bindings = results[0].node_bindings.get(qnode)
-        if bindings is None:
-            return TestResult(False, f"no node binding for qnode {qnode!r}")
+        def collapse_key(result: Any) -> tuple[frozenset[Any], frozenset[Any]]:
+            """A result's identity with the collated qnode and its incident edges removed."""
+            nodes = frozenset(
+                (qid, frozenset(binding_ids(binding)))
+                for qid, binding in result.node_bindings.items()
+                if qid != qnode
+            )
+            edges = frozenset(
+                (qeid, frozenset(binding_ids(binding)))
+                for analysis in (result.analyses or [])
+                for qeid, binding in (analysis.edge_bindings or {}).items()
+                if qedges and qeid not in incident
+            )
+            return nodes, edges
 
-        ids = list(binding_ids(bindings))
-        passed = len(ids) >= min_ids
+        keys = [collapse_key(result) for result in (model.message.results or [])]
+        collided = sum(count for count in Counter(keys).values() if count > 1)
         return TestResult(
-            passed,
+            collided == 0,
             None
-            if passed
-            else f"qnode {qnode!r} bound {len(ids)} id(s), want ≥ {min_ids}",
+            if collided == 0
+            else f"{collided} results collapse on {qnode!r} (identical off the collated node+edges)",
         )
 
     @classmethod
-    def expect(cls, qnode: str, min_ids: int = 2) -> type[Test]:
-        """A variant asserting ``qnode`` binds at least ``min_ids`` ids in one result."""
-        return bind(
-            cls,
-            name=f"collate: {qnode} binds ≥ {min_ids} in 1 result",
-            qnode=qnode,
-            min_ids=min_ids,
-        )
+    def expect(cls, qnode: str) -> type[Test]:
+        """A variant asserting no two results collapse onto the collated ``qnode``."""
+        return bind(cls, name=f"collate: no results collapse on {qnode}", qnode=qnode)

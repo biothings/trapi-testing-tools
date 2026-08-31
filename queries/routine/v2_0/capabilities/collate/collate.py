@@ -1,7 +1,7 @@
 from tests.battery import standard_battery_2_0
-from tests.constraints import CollatedIntoSingleResult
+from tests.constraints import CollatedResultsUnique
 
-# 2.0 set_interpretation COLLATE: multiple matching intermediates collapse into one result
+# 2.0 COLLATE (gene, middle node): all matching genes fold into one result; results distinguished only by the non-gene nodes+edges
 trapi_version = "2.0"
 method = "POST"
 endpoint = "/query"
@@ -40,5 +40,5 @@ body = {
 }
 tests = [
     *standard_battery_2_0(),
-    CollatedIntoSingleResult.expect("gene", 2),
+    CollatedResultsUnique.expect("gene"),
 ]
