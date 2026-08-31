@@ -1,7 +1,7 @@
 """TRAPI 2.0 behavioral tests (constraint honoring, parameter echo, COLLATE) — 2.0-only.
 
-Constraint checks are literal membership checks (no Biolink hierarchy expansion), so match
-the exact values a component is expected to return.
+KL/AT, sources, and qualifier checks are literal (no Biolink hierarchy expansion); attribute
+constraints delegate to TOM's operator engine (`Edge.meets_attribute_constraints`).
 """
 
 from collections import Counter
@@ -13,6 +13,7 @@ from tests import trapi
 from tests.base_test import Test, TestResult
 from tests.kg import binding_ids
 from tests.params import bind
+from trapi_testing_tools.trapi_models import models
 
 
 def _kg_edges(model: object) -> dict[str, object]:
@@ -144,6 +145,41 @@ class EdgesSatisfyQualifiers(Test):
             for one_set in sets
         )
         return bind(cls, name=f"edges satisfy qualifiers {listing}", sets=frozen)
+
+
+class EdgesSatisfyAttributes(Test):
+    """kg edges satisfy the attribute constraint."""
+
+    @override
+    @staticmethod
+    def test(
+        response: httpx.Response, *, constraints: tuple[dict[str, Any], ...] = ()
+    ) -> TestResult:
+        model = trapi.parse_or_fail(response)
+        if isinstance(model, TestResult):
+            return model
+
+        # Rebuild the constraints as TOM models and let TOM apply its operator engine per edge.
+        specs = [
+            models().AttributeConstraint.model_validate(dict(c)) for c in constraints
+        ]
+        violations = [
+            edge_id
+            for edge_id, edge in _kg_edges(model).items()
+            if not edge.meets_attribute_constraints(specs)
+        ]
+        return TestResult(len(violations) == 0, violations or None)
+
+    @classmethod
+    def expect(cls, *constraints: dict[str, Any]) -> type[Test]:
+        """A variant asserting every KG edge meets the given attribute constraint(s), via TOM."""
+        listing = " AND ".join(
+            f"{c.get('id')} {'not ' if c.get('not') else ''}{c.get('operator')} {c.get('value')!r}"
+            for c in constraints
+        )
+        return bind(
+            cls, name=f"edges satisfy attributes {listing}", constraints=constraints
+        )
 
 
 class ParametersEchoed(Test):

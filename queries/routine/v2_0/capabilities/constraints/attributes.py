@@ -1,4 +1,5 @@
 from tests.battery import standard_battery_2_0
+from tests.constraints import EdgesSatisfyAttributes
 
 # 2.0 constraints.attributes: the old attribute_constraints (here z_score > 5)
 trapi_version = "2.0"
@@ -31,4 +32,9 @@ body = {
         }
     },
 }
-tests = standard_battery_2_0()
+tests = [
+    *standard_battery_2_0(),
+    EdgesSatisfyAttributes.expect(
+        {"id": "biolink:z_score", "operator": ">", "value": 5}
+    ),
+]
