@@ -31,6 +31,10 @@ DEFAULT_ENVS = {
         "arax.ci": "https://shepherd.ci.transltr.io/arax",
         "bte.ci": "https://shepherd.ci.transltr.io/bte",
         "sipr.ci": "https://shepherd.ci.transltr.io/sipr",
+        "aragorn.test": "https://shepherd.test.transltr.io/aragorn",
+        "arax.test": "https://shepherd.test.transltr.io/arax",
+        "bte.test": "https://shepherd.test.transltr.io/bte",
+        "sipr.test": "https://shepherd.test.transltr.io/sipr",
     },
 }
 
