@@ -11,10 +11,15 @@ from pydantic_settings import (
 
 DEFAULT_ENVS = {
     "ars": {
-        "prod": "https://ars-prod.transltr.io/ars/api/messages",
-        "test": "https://ars.test.transltr.io/ars/api/messages",
-        "ci": "https://ars.ci.transltr.io/ars/api/messages",
-        "dev": "https://ars-dev.transltr.io/ars/api/messages",
+        "prod": "https://ars-prod.transltr.io",
+        "test": "https://ars.test.transltr.io",
+        "ci": "https://ars.ci.transltr.io",
+        "dev": "https://ars-dev.transltr.io",
+    },
+    "gandalf": {
+        "dev": "https://gandalf.renci.org",
+        "ci": "http://tier0-dogpark.ci.transltr.io:6429",
+        "test": "http://tier0-dogpark.test.transltr.io:6429",
     },
     "retriever": {
         "local": "http://localhost:8080",
@@ -22,19 +27,25 @@ DEFAULT_ENVS = {
         "ci": "https://retriever.ci.transltr.io",
         "test": "https://retriever.test.transltr.io",
     },
-    "shepherd": {
-        "aragorn.dev": "https://shepherd.renci.org/aragorn",
-        "arax.dev": "https://shepherd.renci.org/arax",
-        "bte.dev": "https://shepherd.renci.org/bte",
-        "sipr.dev": "https://shepherd.renci.org/sipr",
-        "aragorn.ci": "https://shepherd.ci.transltr.io/aragorn",
-        "arax.ci": "https://shepherd.ci.transltr.io/arax",
-        "bte.ci": "https://shepherd.ci.transltr.io/bte",
-        "sipr.ci": "https://shepherd.ci.transltr.io/sipr",
-        "aragorn.test": "https://shepherd.test.transltr.io/aragorn",
-        "arax.test": "https://shepherd.test.transltr.io/arax",
-        "bte.test": "https://shepherd.test.transltr.io/bte",
-        "sipr.test": "https://shepherd.test.transltr.io/sipr",
+    "shepherd.aragorn": {
+        "dev": "https://shepherd.renci.org/aragorn",
+        "ci": "https://shepherd.ci.transltr.io/aragorn",
+        "test": "https://shepherd.test.transltr.io/aragorn",
+    },
+    "shepherd.arax": {
+        "dev": "https://shepherd.renci.org/arax",
+        "ci": "https://shepherd.ci.transltr.io/arax",
+        "test": "https://shepherd.test.transltr.io/arax",
+    },
+    "shepherd.bte": {
+        "dev": "https://shepherd.renci.org/bte",
+        "ci": "https://shepherd.ci.transltr.io/bte",
+        "test": "https://shepherd.test.transltr.io/bte",
+    },
+    "shepherd.sipr": {
+        "dev": "https://shepherd.renci.org/sipr",
+        "ci": "https://shepherd.ci.transltr.io/sipr",
+        "test": "https://shepherd.test.transltr.io/sipr",
     },
 }
 

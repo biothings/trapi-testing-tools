@@ -10,6 +10,3 @@
 #   cloudflared_path: cloudflared
 
 environments:
-  gandalf:
-    dev: https://gandalf.renci.org
-    ci: http://tier0-dogpark.ci.transltr.io:6429

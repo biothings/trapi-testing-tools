@@ -20,6 +20,13 @@ from trapi_testing_tools.utils import handle_output
 console = Console(stderr=True)
 client = httpx.AsyncClient(follow_redirects=True, timeout=300)
 
+ARS_MESSAGES_PATH = "/ars/api/messages"
+
+
+def _ars_messages_url(base: str) -> str:
+    """Build the ARS messages endpoint from an environment's base URL."""
+    return f"{base.rstrip('/')}{ARS_MESSAGES_PATH}"
+
 
 async def check_ars_pk(
     lvl: str, pk: str, status: progress.Progress
@@ -28,7 +35,8 @@ async def check_ars_pk(
     task = status.add_task(f"Querying ARS {lvl.capitalize()}...")
 
     try:
-        response = await client.get(f"{CONFIG.environments['ars'][lvl]}/{pk}?trace=y")
+        base = _ars_messages_url(CONFIG.environments["ars"][lvl])
+        response = await client.get(f"{base}/{pk}?trace=y")
         response.raise_for_status()
     except httpx.HTTPStatusError as error:
         code = error.response.status_code
@@ -114,7 +122,7 @@ def get_ars_ara_response(
     console.print(f"Child key for {selection}: {actor['message']}")
 
     with console.status("Querying ARS for TRAPI response..."):
-        response = httpx.get(f"{target_ars}/{actor['message']}")
+        response = httpx.get(f"{_ars_messages_url(target_ars)}/{actor['message']}")
     response.raise_for_status()
     console.print(f"Got ARS stored response for {selection}")
     return response.json(), actor["actor"]["agent"]
