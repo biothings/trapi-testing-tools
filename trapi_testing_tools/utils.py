@@ -528,16 +528,24 @@ def select_tests(test_type: TestType) -> list[Path]:
     return [prompt_to_fpath[prompt] for prompt in selection]
 
 
+def _health_check_path(app_name: str) -> str:
+    """The endpoint whose presence signals an app is up (405 to a GET means live)."""
+    if app_name == "ars" or app_name.startswith("ars."):
+        return "/ars/api/submit"
+    return "/query"
+
+
 async def check_api(
     instance_name: str,
     instance_url: str,
     max_name_len: int,
     progress: progress.Progress,
+    path: str = "/query",
 ) -> bool:
     """Check that the given API is responsive, updating the given status."""
     task = progress.add_task(f" {instance_name:>{max_name_len}} querying...", total=1)
     try:
-        response = await ASYNC_BASIC_CLIENT.get(f"{instance_url}/query", timeout=10)
+        response = await ASYNC_BASIC_CLIENT.get(f"{instance_url}{path}", timeout=10)
         if response.status_code != HTTPStatus.METHOD_NOT_ALLOWED:
             response.raise_for_status()
         time = round(response.elapsed.total_seconds() * 1000)
@@ -573,11 +581,25 @@ async def _gather_bools(tasks: list[Coroutine[Any, Any, bool]]) -> list[bool]:
 
 def check_apps_responsive(apps: list[tuple[str, dict[str, str]]]) -> None:
     """Check that a given list of apps are responsive."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        _check_apps_responsive(apps, loop)
+    finally:
+        asyncio.set_event_loop(None)
+        loop.close()
+
+
+def _check_apps_responsive(
+    apps: list[tuple[str, dict[str, str]]], loop: asyncio.AbstractEventLoop
+) -> None:
+    """Render and run the responsiveness checks on a single shared event loop."""
     for app_name, instances in apps:
         if app_name == "default":
             continue
         console.print(f"[rule.line]{app_name}:[/]")
 
+        path = _health_check_path(app_name)
         max_name_len = max(*[len(key) for key in instances if key != "local"])
         statuses = list[progress.Progress]()
         async_tasks = list[Coroutine[Any, Any, bool]]()
@@ -593,7 +615,7 @@ def check_apps_responsive(apps: list[tuple[str, dict[str, str]]]) -> None:
             )
             statuses.append(status)
             async_tasks.append(
-                check_api(instance_name, instance_url, max_name_len, status)
+                check_api(instance_name, instance_url, max_name_len, status, path)
             )
 
         overall = progress.Progress(
@@ -608,7 +630,7 @@ def check_apps_responsive(apps: list[tuple[str, dict[str, str]]]) -> None:
         live = Live(group)
         with live:
             task = overall.add_task("Checking instances...", total=1)
-            result = asyncio.run(_gather_bools(async_tasks))
+            result = loop.run_until_complete(_gather_bools(async_tasks))
             overall.update(task, completed=1, visible=False)
 
             passed = len([res for res in result if res])
