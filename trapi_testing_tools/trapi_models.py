@@ -26,8 +26,11 @@ TrapiVersion = Literal["1.6", "2.0"]
 DEFAULT_TRAPI_VERSION: TrapiVersion = "1.6"
 """The version assumed when a query file declares no `trapi_version`."""
 
-_NAMESPACES = {"1.6": _v1_6, "2.0": _v2_0}
+_NAMESPACES: dict[TrapiVersion, ModuleType] = {"1.6": _v1_6, "2.0": _v2_0}
 _SEMANTIC_VALIDATORS = {"1.6": _semantic_1_6, "2.0": _semantic_2_0}
+
+SUPPORTED_VERSIONS: tuple[TrapiVersion, ...] = tuple(_NAMESPACES)
+"""The TRAPI major versions TOM can parse and diff."""
 
 current_trapi_version: ContextVar[TrapiVersion] = ContextVar(
     "current_trapi_version", default=DEFAULT_TRAPI_VERSION
@@ -43,6 +46,14 @@ def resolve(version: TrapiVersion | None = None) -> TrapiVersion:
 def models(version: TrapiVersion | None = None) -> ModuleType:
     """The TOM model namespace (`translator_tom.v1_6` / `.v2_0`) for `version`."""
     return _NAMESPACES[resolve(version)]
+
+
+def detect_version(schema_version: str | None) -> TrapiVersion | None:
+    """The supported TRAPI version a `schema_version` string denotes (e.g. `1.6.0` → `1.6`), if any."""
+    if not schema_version:
+        return None
+    major_minor = ".".join(schema_version.split(".")[:2])
+    return next((v for v in SUPPORTED_VERSIONS if v == major_minor), None)
 
 
 def semantic_validate(model: object, version: TrapiVersion | None = None) -> object:

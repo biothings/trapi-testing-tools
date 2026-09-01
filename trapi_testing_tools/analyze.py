@@ -1,3 +1,4 @@
+import json
 import sys
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -10,15 +11,15 @@ from rich.console import Console
 from rich.text import Text
 
 from analysis.base_analysis import AnalysisClass, ParametrizedAnalysis
-from trapi_testing_tools.trapi_models import models
+from trapi_testing_tools.trapi_models import TrapiVersion, detect_version, models
 from trapi_testing_tools.types import OutputModes
 from trapi_testing_tools.utils import IndentedBlock, handle_output, serialize_body
 
 console = Console(stderr=True)
 
 
-def load_response(file: Path | None) -> Any:
-    """Load a TRAPI Response (for the active TRAPI version), from a file or stdin."""
+def read_response_bytes(file: Path | None) -> tuple[bytes, str]:
+    """Read raw response bytes from a file or stdin, returning them with a source label."""
     source = "stdin" if file is None else str(file)
     try:
         data = file.read_bytes() if file is not None else sys.stdin.buffer.read()
@@ -30,13 +31,35 @@ def load_response(file: Path | None) -> Any:
         console.print(f"ERROR: no input read from {source}.", style="red")
         raise typer.Exit(1)
 
+    return data, source
+
+
+def parse_response(
+    data: bytes, source: str, version: TrapiVersion | None = None
+) -> Any:
+    """Parse raw bytes into a TRAPI Response for the given (or active) TRAPI version."""
     try:
-        return models().Response.from_json(data)
+        return models(version).Response.from_json(data)
     except Exception as error:
         console.print(
             f"ERROR: {source} is not a valid TRAPI response: {error!r}", style="red"
         )
         raise typer.Exit(1) from error
+
+
+def detect_response_version(data: bytes) -> TrapiVersion | None:
+    """The supported TRAPI version a raw response's `schema_version` denotes, if determinable."""
+    try:
+        schema_version = json.loads(data).get("schema_version")
+    except (ValueError, AttributeError):
+        return None
+    return detect_version(schema_version)
+
+
+def load_response(file: Path | None, version: TrapiVersion | None = None) -> Any:
+    """Load a TRAPI Response (for the given or active TRAPI version), from a file or stdin."""
+    data, source = read_response_bytes(file)
+    return parse_response(data, source, version)
 
 
 def run_analyses(

@@ -93,6 +93,7 @@ tt pk <PK> --trace/-t         # skip the drill-down; show the overall ARS trace 
 tt pk <PK> --raw/-r           # after picking a child, skip TRAPI extraction; emit the raw ARS stored response
 tt ping [app] [--all]         # check service instances are responsive
 tt curl <query> -e <env>      # print the query as a curl command
+tt diff <LEFT> [RIGHT]        # TRAPI-aware, order-insensitive diff of two responses (RIGHT via stdin); TRAPI 1.6/2.0, auto-detected from schema_version or forced with --trapi-version
 ```
 Output flags shared across commands: `-v/--view` / `-V/--no-view` (view opens
 `CONFIG.viewer`, default `fx`), `-s/--save <path>` / `-S/--no-save`, `-p/--pipe`

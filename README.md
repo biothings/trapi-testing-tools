@@ -106,6 +106,32 @@ options with `-- --help`.
 tt analyze PathCount -f response.json -- --start NCBIGene:3778 --end MONDO:0000437
 ```
 
+### Diffing two responses
+
+`tt diff` compares two TRAPI responses in a TRAPI-aware, order-insensitive way.
+
+```bash
+# diff two saved responses (LEFT is the baseline)
+tt diff baseline.json new.json
+
+# omit both files to pick them interactively from responses/
+tt diff
+
+# identity mode: report only what was added/removed by TRAPI identity, ignoring
+# attribute/provenance/score changes
+tt diff baseline.json new.json -i
+
+# --full expands added/removed/changed content inline (git-diff style) instead of
+# showing just the locator
+tt diff baseline.json new.json --full
+
+# emit the JSON diff report for scripting
+tt diff baseline.json new.json --json -p | jq '.summary'
+
+# force the TRAPI version instead of auto-detecting from schema_version
+tt diff baseline.json new.json --trapi-version 2.0
+```
+
 ## Writing a query
 
 You can add your own queries to be used in `tt test`, the specification is relatively
