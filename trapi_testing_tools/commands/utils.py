@@ -1,4 +1,5 @@
 import importlib
+import os
 from collections.abc import Sized
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -67,14 +68,15 @@ def set_queries(
         ]
         used_interactive = True
 
-    # recurse_symlinks so profile symlink-dirs expand; de-dup since profiles overlap (ara ⊃ lookup)
+    # os.walk(followlinks) so profile symlink-dirs expand; de-dup since profiles overlap (ara ⊃ lookup)
     expanded: list[Path] = []
     for path in queries:
         if path.is_dir():
             matches = sorted(
-                p.resolve()
-                for p in path.rglob("*.py", recurse_symlinks=True)
-                if "__pycache__" not in p.parts
+                Path(root, name).resolve()
+                for root, _, names in os.walk(path, followlinks=True)
+                for name in names
+                if name.endswith(".py") and "__pycache__" not in Path(root).parts
             )
             if not matches:
                 console.print(
