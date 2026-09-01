@@ -8,8 +8,10 @@ Install a JSON viewer for inspecting responses. The default is fx:
 [https://fx.wtf/install](https://fx.wtf/install). You can use different viewers (such as
 [jless](https://jless.io/)), see [Configuring JSON viewer](#configuring-json-viewer).
 
-
-**Optional:** install [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) (e.g. `brew install cloudflared`) to receive `/asyncquery` callbacks from **remote** services via a tunnel (see [Async queries](#async-queries-asyncquery-and-callbacks)). It's not required — without it, async testing against remote services automatically falls back to status polling.
+**Optional:** install
+[`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
+(e.g. `brew install cloudflared`) to receive `/asyncquery` callbacks from **remote**
+services via a tunnel (see [Async queries](#async-queries-asyncquery-and-callbacks)).
 
 This project uses uv for package/dependency management. Install instructions:
 [https://docs.astral.sh/uv/getting-started/installation/](https://docs.astral.sh/uv/getting-started/installation/)
@@ -45,7 +47,7 @@ To run a full test of everything in the routine folder, against your local insta
 viewing only failed tests:
 
 ```bash
-tt test -d -e bte.local queries/routine
+tt test -d -e retriever.local queries/routine
 ```
 
 ### Specific tests
@@ -114,18 +116,19 @@ simple:
 from tests import http
 
 method = "POST"  # Use any HTTP method here
-endpoint = "/v1/query"  # The endpoint to be applied to the tool
+endpoint = "/query"  # The endpoint to be applied to the tool
 headers = {}  # You can optionally specify headers
 params = {...}  # You can optionally pass URL parameters as a dictionary of param_name: value
 body = {...}  # You can optionally add a body in the form of a dictionary
-tests = [http.status(200)]  # You can optionally set tests to validate the response
+tests = [http.Status.expect(200)]  # You can optionally set tests to validate the response
 ```
 
 The `body` may be a plain dict (as above) or a
 [translator_tom](https://github.com/NCATSTranslator/TRAPIObjectModeling) (TOM) model.
 
-Queries placed under the `queries/routine` directory are the routine battery — run
-them all with `tt test queries/routine` (folders expand recursively).
+Async queries initiate a callback tunnel, or failing that, poll (either way, a callback
+url is injected, if one is not already present). Submitter, if not set, is auto-injected
+as `trapi-testing-tools` (configurable).
 
 ### Multi-query tests
 
@@ -141,8 +144,46 @@ body1 = {...}  # A query body
 body2 = {...} # Another body, can modify a copy of previous
 
 steps = [
-    Query(method="POST", endpoint="/query", body=body1, tests=[http.status(200)]),
-    Query(method="POST", endpoint="/query", body=body2, tests=[http.status(200)]),
+    Query(method="POST", endpoint="/query", body=body1, tests=[http.Status.expect(200)]),
+    Query(method="POST", endpoint="/query", body=body2, tests=[http.Status.expect(200)]),
+]
+```
+
+#### Follow-up steps
+
+If you need follow-up steps to use a previous step's state, you can write a `FollowUp`:
+
+```python
+from tests import http
+from trapi_testing_tools.console import console
+from trapi_testing_tools.query_utils import one_hop
+from trapi_testing_tools.types import FollowUp, Query
+
+DRUG = "PUBCHEM.COMPOUND:5291"  # imatinib
+
+
+class PinBestResult(FollowUp):
+    def build(self, previous, history) -> Query:
+        message = previous.response.json()["message"]
+        best = message["results"][0]  # imagine results come back score-ordered
+        disease = best["node_bindings"]["n1"][0]["id"]
+        console.print(f"pinning best result: {disease}")  # ambient commentary
+        # use self.derive to only override the dynamic parts of the query
+        return self.derive(
+            body=one_hop(subject_ids=DRUG, object_ids=disease)
+        )
+
+
+steps = [
+    # first hop: pin only the drug, ask which diseases it treats
+    Query(
+        method="POST",
+        endpoint="/query",
+        body=one_hop(subject_ids=DRUG, object_category="Disease", predicate="treats"),
+        tests=[http.Status.expect(200)],
+    ),
+    # follow-up: re-run double-pinned against the best-scoring disease it returned
+    PinBestResult(method="POST", endpoint="/query", tests=[http.Status.expect(200)]),
 ]
 ```
 
@@ -201,15 +242,15 @@ from analysis.base_analysis import Analysis, ParametrizedAnalysis, AnalysisOutpu
 
 ##### A simple analysis #####
 class ResponseShape(Analysis):
-    """node frequency across kg edges."""
+    """response shape summary."""
 
     @staticmethod
     def analyze(response: Response) -> AnalysisOutput:
         kg = response.message.knowledge_graph
         return {
-            "nodes": len(kg.nodes_dict),
-            "edges": len(kg.edges_dict),
-            "results": len(response.message.results_list
+            "nodes": len(kg.nodes),
+            "edges": len(kg.edges),
+            "results": len(response.message.results_list),
         }
 
 
@@ -232,7 +273,7 @@ class MyAnalysis(ParametrizedAnalysis):
 ## Adding services to test
 
 Services are specified in
-[`config.yaml`](https://github.com/biothings/bte-hurl/blob/main/config.yaml). See the
+[`config.yaml`](https://github.com/biothings/trapi-testing-tools/blob/main/config.yaml). See the
 bte entry for an example.
 
 Services are selected either interactively or by adding `-e <service>.<level>` to the
@@ -256,18 +297,18 @@ viewer: jless
 
 For `/asyncquery` endpoints, TTT receives the service's callback directly rather than
 relying on `/asyncquery_status` polling (services increasingly discard the response
-after firing the callback). It stands up a throwaway local HTTP receiver for the run
-and injects a per-query `callback` URL into the request body — **unless the query
-already specifies a `callback`, in which case that one is respected and TTT falls back
-to polling.**
+after firing the callback). It stands up a throwaway local HTTP receiver for the run and
+injects a per-query `callback` URL into the request body — **unless the query already
+specifies a `callback`, in which case that one is respected and TTT falls back to
+polling.**
 
 How the receiver is reached is controlled by `callback.mode`, overridable per run with
 `--callback-mode` (`--cb`):
 
 - **`auto`** (default) — direct `127.0.0.1` callback for local (loopback/private)
-  targets; a [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
-  quick tunnel for remote targets. Falls back to polling if cloudflared isn't
-  installed.
+  targets; a
+  [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
+  quick tunnel for remote targets. Falls back to polling if cloudflared isn't installed.
 - **`direct`** — always advertise the local receiver directly.
 - **`tunnel`** — always use a cloudflared quick tunnel.
 - **`poll`** — legacy behavior: poll `/asyncquery_status`, then fetch `response_url`.

@@ -1,6 +1,6 @@
 import importlib
 import time
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Literal, cast
@@ -148,6 +148,86 @@ def run_queries(  # noqa: PLR0913
     return all_passed
 
 
+@dataclass
+class _RunState:
+    """Per-run output config plus state accumulated as each step runs."""
+
+    collect: bool
+    include_response: bool
+    steps: list[StepResult] = field(default_factory=list)
+    query_passed: bool = True
+    total_passed: int = 0
+    total_failed: int = 0
+    any_tests: bool = False
+    query_elapsed: float = 0.0
+    final_response: httpx.Response | None = None
+    history: list[StepRecord] = field(default_factory=list)
+
+
+def _run_step(
+    step: Query,
+    state: _RunState,
+    url: str,
+    session: CallbackSession | None,
+) -> str | None:
+    """Run one step, repeating if it's a repeating `FollowUp`, updating `state`.
+
+    Returns a bail message if the step produced no response (the caller ends the
+    query), else ``None``.
+    """
+    while True:
+        # A FollowUp is built from prior results; a build error becomes a no-response step.
+        query, run, bail_reason = _resolve_step(step, state.history, url)
+        if run is None:
+            run = run_query(query, url, session)
+        state.final_response = run.response
+        state.query_elapsed += run.elapsed
+
+        if run.response is None:
+            state.query_passed = False
+            if state.collect:
+                state.steps.append(
+                    build_step(
+                        run,
+                        step_passed=False,
+                        tests_passed=True,
+                        include_response=state.include_response,
+                    )
+                )
+            return bail_reason
+
+        step_ok = run.status == "ok"
+        outcomes: list[TestOutcome] = []
+        tests_passed = True
+        if step_ok and query.tests is not None:
+            state.any_tests = True
+            with use_version(query.trapi_version):
+                n_passed, n_failed, outcomes = run_tests(query, run.response)
+            state.total_passed += n_passed
+            state.total_failed += n_failed
+            tests_passed = n_failed == 0
+
+        step_passed = step_ok and tests_passed
+        state.query_passed = state.query_passed and step_passed
+
+        if state.collect:
+            state.steps.append(
+                build_step(
+                    run,
+                    step_passed,
+                    tests_passed,
+                    outcomes,
+                    include_response=state.include_response,
+                )
+            )
+
+        state.history.append(build_record(run, tests_passed, outcomes))
+
+        # Loop only for a repeating FollowUp, rebuilding from its own last result.
+        if not (isinstance(step, FollowUp) and _should_repeat(step, state.history)):
+            return None
+
+
 def manage_query(  # noqa: PLR0913
     query_module: ModuleType,
     url: str,
@@ -164,7 +244,6 @@ def manage_query(  # noqa: PLR0913
     `QueryResult` when piping (for the aggregate report), else ``None``.
     """
     collect = output_modes[0] == "pipe"
-    include_response = pipe_mode is not PipeMode.report
 
     rel_path = Path(cast(str, query_module.__file__)).relative_to(
         Path(trapi_testing_tools.__path__[0]).parent
@@ -176,94 +255,57 @@ def manage_query(  # noqa: PLR0913
     console.push_render_hook(IndentedBlock())
 
     queries = parse_query(query_module)
-
-    steps: list[StepResult] = []
-    query_passed = True
-    total_passed = 0
-    total_failed = 0
-    any_tests = False
-    query_elapsed = 0.0
-    final_response: httpx.Response | None = None
-    history: list[StepRecord] = []
+    state = _RunState(collect, include_response=pipe_mode is not PipeMode.report)
 
     for step in queries:
-        # A FollowUp is built from prior results; a build error becomes a no-response step.
-        query, run, bail_reason = _resolve_step(step, history, url)
-        if run is None:
-            run = run_query(query, url, session)
-        final_response = run.response
-        query_elapsed += run.elapsed
-
-        if run.response is None:
-            query_passed = False
-            if collect:
-                steps.append(
-                    build_step(
-                        run,
-                        step_passed=False,
-                        tests_passed=True,
-                        include_response=include_response,
-                    )
-                )
+        bail_reason = _run_step(step, state, url, session)
+        if bail_reason is not None:
             console.pop_render_hook()
             console.print(f"└ {bail_reason}", style="rule.line")
             result = (
                 build_query_result(
-                    rel_path, env, steps, False, query_elapsed, len(queries) > 1
+                    rel_path,
+                    env,
+                    state.steps,
+                    False,
+                    state.query_elapsed,
+                    len(queries) > 1,
                 )
                 if collect
                 else None
             )
             return False, result
 
-        step_ok = run.status == "ok"
-        outcomes: list[TestOutcome] = []
-        tests_passed = True
-        if step_ok and query.tests is not None:
-            any_tests = True
-            with use_version(query.trapi_version):
-                n_passed, n_failed, outcomes = run_tests(query, run.response)
-            total_passed += n_passed
-            total_failed += n_failed
-            tests_passed = n_failed == 0
-
-        step_passed = step_ok and tests_passed
-        query_passed = query_passed and step_passed
-
-        if collect:
-            steps.append(
-                build_step(
-                    run,
-                    step_passed,
-                    tests_passed,
-                    outcomes,
-                    include_response=include_response,
-                )
-            )
-
-        history.append(build_record(run, tests_passed, outcomes))
-
     console.pop_render_hook()
 
     # Output (non-pipe only; piping is aggregated into one report by run_queries)
     if not collect:
-        _emit_output(final_response, output_modes, save_path, on_fail, query_passed)
+        _emit_output(
+            state.final_response, output_modes, save_path, on_fail, state.query_passed
+        )
 
-    _print_verdict(query_passed, any_tests, total_passed, total_failed)
+    _print_verdict(
+        state.query_passed, state.any_tests, state.total_passed, state.total_failed
+    )
 
     # In debug mode, keep responses only for failing queries (the ones to inspect).
-    if collect and on_fail and query_passed:
-        for step in steps:
-            step.pop("response", None)
+    if collect and on_fail and state.query_passed:
+        for saved in state.steps:
+            saved.pop("response", None)
 
     result = (
         build_query_result(
-            rel_path, env, steps, query_passed, query_elapsed, len(queries) > 1
+            rel_path,
+            env,
+            state.steps,
+            state.query_passed,
+            state.query_elapsed,
+            len(queries) > 1,
         )
         if collect
         else None
     )
-    return query_passed, result
+    return state.query_passed, result
 
 
 def _emit_output(
@@ -313,6 +355,20 @@ def _build_followup(step: FollowUp, history: list[StepRecord]) -> Query:
         built = step.build(history[-1], history)
 
     return inject_default_submitter(replace(built, body=serialize_body(built.body)))
+
+
+def _should_repeat(step: FollowUp, history: list[StepRecord]) -> bool:
+    """Whether a `FollowUp` wants to run again; a raising `repeat` stops the loop."""
+    try:
+        with comment_console():
+            return step.repeat(history[-1], history)
+    except Exception as error:
+        console.print(
+            f"[red]FollowUp {type(step).__name__}.repeat failed:[/] {error!r}",
+            markup=True,
+        )
+        maybe_print_traceback()
+        return False
 
 
 def _resolve_step(

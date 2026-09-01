@@ -38,7 +38,7 @@ from translator_tom import TOMBase
 from tests.base_test import Test
 from trapi_testing_tools.config import CONFIG
 from trapi_testing_tools.console import console
-from trapi_testing_tools.types import HTTPMethod, Query
+from trapi_testing_tools.types import HTTPMethod, Query, TestType
 
 SYNC_BASIC_CLIENT = httpx.Client(follow_redirects=True, timeout=None)
 ASYNC_BASIC_CLIENT = httpx.AsyncClient(follow_redirects=True, timeout=None)

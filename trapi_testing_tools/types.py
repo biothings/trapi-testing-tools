@@ -55,6 +55,14 @@ class FollowUp(Query, ABC):
     def build(self, previous: "StepRecord", history: "list[StepRecord]") -> Query:
         """Build this step's concrete `Query`. `previous` is `history[-1]`."""
 
+    def repeat(self, previous: "StepRecord", history: "list[StepRecord]") -> bool:
+        """Whether to run this step again, rebuilding from its own last result.
+
+        Called after each run with `previous` being this step's own latest record;
+        return True to loop (e.g. poll until done). Defaults to no repeat.
+        """
+        return False
+
     def derive(self, **overrides: Any) -> Query:
         """A `Query` from this instance's fields, with `overrides` applied."""
         base = {f.name: getattr(self, f.name) for f in fields(Query)}

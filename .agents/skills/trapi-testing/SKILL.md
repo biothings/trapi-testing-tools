@@ -136,8 +136,8 @@ body = {
 tests = standard_battery()   # list of Test subclasses; see below
 ```
 
-**Multiple related requests** — a `steps` list of `Query` objects (see
-`queries/routine/feature/caching/cache.py`):
+**Multiple related requests** — a `steps` list of `Query` objects (defined in
+`trapi_testing_tools/types.py`):
 ```python
 from trapi_testing_tools.types import Query
 from tests import logs
@@ -152,6 +152,39 @@ steps = [
 `body` may be a dict/list or a `translator_tom` (TOM) model — both are
 serialized automatically. Endpoints containing `asyncquery` are auto-polled to
 completion.
+
+**Follow-up steps (thread data between requests)** — when a step depends on an
+earlier step's response (async submit → poll, create → read, capture a returned
+value and reuse it), make it a `FollowUp` instead of a plain `Query`. `FollowUp`
+is a `Query` subclass (`trapi_testing_tools/types.py`) whose `build(previous,
+history)` you implement to construct that step's concrete `Query` at run time.
+`previous` is the immediately-prior `StepRecord` (`history[-1]`) and `history` is
+every prior step's record (each carries the parsed response, test outcomes, and
+status). Use `self.derive(**overrides)` to copy this instance's own fields and
+change only the dynamic bits:
+```python
+from trapi_testing_tools.console import console
+from trapi_testing_tools.types import FollowUp, Query
+
+class SubmitThenPoll(FollowUp):
+    def build(self, previous, history) -> Query:
+        job_id = previous.response.json()["job_id"]
+        console.print(f"polling job {job_id}")   # ambient, auto-styled commentary
+        return self.derive(endpoint=f"/status/{job_id}", method="GET")
+
+steps = [
+    Query(method="POST", endpoint="/asyncquery", body=query_body),
+    SubmitThenPoll(tests=standard_battery()),
+]
+```
+Override `repeat(previous, history)` (default `False`) to run the same step
+again — rebuilt from its own latest result as `previous` — until it returns
+`False`; a natural fit for the poll loop above.
+
+To log from `build` in step with the runner's output, print via the shared
+`console` (`from trapi_testing_tools.console import console`) rather than a bare
+`print` — `build`-time output is auto-styled comment-color to read as ambient
+commentary.
 
 For TOM-model bodies, `trapi_testing_tools/query_utils.py` has convenience
 constructors: `one_hop(...)` builds a two-node/one-edge query from
