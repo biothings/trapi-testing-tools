@@ -9,4 +9,8 @@
 #   port: 0  # 0 = OS-assigned ephemeral port
 #   cloudflared_path: cloudflared
 
-environments:
+# Extra service environments, merged over the built-in defaults. Each key is an
+# app name mapping instance names to base URLs, e.g.:
+# environments:
+#   myapp:
+#     dev: https://dev.example.org

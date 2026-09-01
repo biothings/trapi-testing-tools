@@ -84,14 +84,14 @@ class TTTConfig(BaseSettings):
     )
     callback: CallbackConfig = Field(default_factory=CallbackConfig)
 
-    @field_validator("environments", mode="after")
+    @field_validator("environments", mode="before")
     @classmethod
     def include_default(
-        cls, value: dict[str, dict[str, str]]
+        cls, value: dict[str, dict[str, str]] | None
     ) -> dict[str, dict[str, str]]:
         """Ensure the defaults are included, with the config taking precedence."""
         envs = deepcopy(DEFAULT_ENVS)
-        envs.update(value)
+        envs.update(value or {})
         return envs
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(

@@ -3,13 +3,13 @@ import json
 import shutil
 import subprocess
 import zipfile
-from collections.abc import Iterator
+from collections.abc import Coroutine, Iterator
 from contextlib import contextmanager, redirect_stdout
 from dataclasses import replace
 from http import HTTPStatus
 from pathlib import Path
 from sys import stderr, stdin
-from types import CoroutineType, ModuleType
+from types import ModuleType
 from typing import Any, Literal, cast, get_args, override
 
 import httpx
@@ -402,36 +402,123 @@ def cache_tests() -> None:
         console.print(
             f"[red]ERROR:[/]: An error occurred while checking/updating cache: {error!r}"
         )
-        with redirect_stdout(stderr):
-            if ConfirmPrompt(
-                "Print traceback for this error?", default=False
-            ).execute():
-                console.print_exception(show_locals=True)
+        maybe_print_traceback()
 
 
-def select_tests(test_type: Literal["asset", "case", "suite"]) -> list[Path]:
-    """Prompt user to fuzzy-select tests using test ID/name/desc."""
-    test_repo = CONFIG.test_repo
+def cache_repo_dir() -> Path:
+    """Return the local directory holding the extracted test repo."""
     dirs = PlatformDirs("trapi-testing-tools", "biothings")
-    cache_dir = dirs.user_cache_path / f"tests/{test_repo.replace('/', '~')}"
+    return dirs.user_cache_path / f"tests/{CONFIG.test_repo.replace('/', '~')}" / "repo"
 
-    test_dir = cache_dir / f"repo/test_{test_type}s"
-    test_files = test_dir.glob("*.json")
-    file_prompts = list[str]()
+
+_TYPE_BY_DIR = {
+    "test_assets": TestType.asset,
+    "test_cases": TestType.case,
+    "test_suites": TestType.suite,
+}
+
+
+def test_type_of_path(path: Path) -> TestType | None:
+    """Infer a test's type from its cache directory (test_assets/cases/suites)."""
+    return _TYPE_BY_DIR.get(path.parent.name)
+
+
+def infer_test_type(path: Path, data: dict[str, Any]) -> TestType:
+    """Infer a test's type from its cache directory, falling back to its shape."""
+    dir_type = test_type_of_path(path)
+    if dir_type is not None:
+        return dir_type
+    if data.get("test_cases"):
+        return TestType.suite
+    if "test_assets" in data:
+        return TestType.case
+    return TestType.asset
+
+
+def cached_test_files(test_type: TestType) -> list[Path]:
+    """Return the cached test JSON files for a given test type."""
+    return sorted((cache_repo_dir() / f"test_{test_type}s").glob("*.json"))
+
+
+def load_cached_tests(test_type: TestType) -> list[tuple[Path, dict[str, Any]]]:
+    """Load all cached test files for a given test type (skipping unreadable ones)."""
+    loaded = list[tuple[Path, dict[str, Any]]]()
+    for path in cached_test_files(test_type):
+        try:
+            with path.open(encoding="utf8") as file:
+                loaded.append((path, json.load(file)))
+        except (OSError, json.JSONDecodeError):
+            continue
+    return loaded
+
+
+def case_input_name(case: dict[str, Any]) -> str | None:
+    """Human-readable name for a case's input CURIE, taken from its assets.
+
+    Case metadata only stores ``test_case_input_id`` (a bare CURIE), but the
+    matching asset carries the ``input_name`` (e.g. ``Aceruloplasminemia`` for
+    ``MONDO:0011426``).
+    """
+    assets = case.get("test_assets") or []
+    tcid = case.get("test_case_input_id")
+    for asset in assets:
+        if asset.get("input_id") == tcid and asset.get("input_name"):
+            return str(asset["input_name"])
+    for asset in assets:  # fall back to any asset's input name
+        if asset.get("input_name"):
+            return str(asset["input_name"])
+    return None
+
+
+def case_display_name(case: dict[str, Any]) -> str:
+    """Case name enriched with its input's human name.
+
+    e.g. ``what treats MONDO:0011426`` -> ``what treats MONDO:0011426
+    (Aceruloplasminemia)``.
+    """
+    name = case.get("name") or case.get("description") or "<No Name>"
+    human = case_input_name(case)
+    if human and human.lower() not in name.lower():
+        name = f"{name} ({human})"
+    return name
+
+
+def test_label(path: Path, test: dict[str, Any], test_type: TestType) -> str:
+    """Build an enriched, filterable label for a test in the fuzzy picker.
+
+    The label is keyed on the file **stem** (which is the unique, resolvable id —
+    suite files share generic internal ids like ``TestSuite_1``). Assets append
+    their input/output CURIEs (the predicate and expected output are already in the
+    test name); cases and suites show a child count.
+    """
+    stem = path.stem
+    if test_type == TestType.suite:
+        name = test.get("name") or test.get("description") or "<No Name>"
+        cases = test.get("test_cases")
+        if cases:
+            return f"{stem}: {name}  ({len(cases)} cases)"
+        return f"{stem}: {name}  ({len(test.get('test_assets') or [])} assets)"
+    if test_type == TestType.case:
+        name = case_display_name(test)
+        return f"{stem}: {name}  ({len(test.get('test_assets') or [])} assets)"
+
+    # asset
+    name = test.get("name") or "<No Name>"
+    label = f"{stem}: {name}"
+    if test.get("input_id") and test.get("output_id"):
+        label += f"  {test['input_id']} → {test['output_id']}"
+    return label
+
+
+def select_tests(test_type: TestType) -> list[Path]:
+    """Prompt user to fuzzy-select tests using an enriched, filterable label."""
     prompt_to_fpath = dict[str, Path]()
-    for test_path in test_files:
-        with test_path.open() as file:
-            test = json.load(file)
-            desc = test["description"] if test_type == "suite" else test["name"]
-            if desc is None:
-                desc = "<No Name>"
-            prompt = f"{test['id']}: {desc}"
-            file_prompts.append(prompt)
-            prompt_to_fpath[prompt] = test_path
+    for path, test in load_cached_tests(test_type):
+        prompt_to_fpath[test_label(path, test, test_type)] = path
 
     selection = FuzzyPrompt(
         message=f"Select test {test_type}(s)...",
-        choices=natsorted(file_prompts),
+        choices=natsorted(prompt_to_fpath),
         multiselect=True,
         border=True,
         instruction="(Type to filter, Tab to select, Enter to confirm)",
@@ -479,6 +566,11 @@ async def check_api(
         return False
 
 
+async def _gather_bools(tasks: list[Coroutine[Any, Any, bool]]) -> list[bool]:
+    """Await the given coroutines concurrently, preserving order."""
+    return await asyncio.gather(*tasks)
+
+
 def check_apps_responsive(apps: list[tuple[str, dict[str, str]]]) -> None:
     """Check that a given list of apps are responsive."""
     for app_name, instances in apps:
@@ -488,7 +580,7 @@ def check_apps_responsive(apps: list[tuple[str, dict[str, str]]]) -> None:
 
         max_name_len = max(*[len(key) for key in instances if key != "local"])
         statuses = list[progress.Progress]()
-        async_tasks = list[CoroutineType[None, None, bool]]()
+        async_tasks = list[Coroutine[Any, Any, bool]]()
 
         for instance_name, instance_url in instances.items():
             if instance_name == "local":
@@ -516,8 +608,7 @@ def check_apps_responsive(apps: list[tuple[str, dict[str, str]]]) -> None:
         live = Live(group)
         with live:
             task = overall.add_task("Checking instances...", total=1)
-            loop = asyncio.get_event_loop()
-            result = loop.run_until_complete(asyncio.gather(*async_tasks))
+            result = asyncio.run(_gather_bools(async_tasks))
             overall.update(task, completed=1, visible=False)
 
             passed = len([res for res in result if res])
