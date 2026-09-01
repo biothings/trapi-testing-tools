@@ -574,9 +574,26 @@ async def check_api(
         return False
 
 
-async def _gather_bools(tasks: list[Coroutine[Any, Any, bool]]) -> list[bool]:
-    """Await the given coroutines concurrently, preserving order."""
-    return await asyncio.gather(*tasks)
+async def _run_section(
+    overall: progress.Progress,
+    overall_task: progress.TaskID,
+    tasks: list[Coroutine[Any, Any, bool]],
+) -> None:
+    """Await one app's checks, then mark its summary bar done independently."""
+    results = await asyncio.gather(*tasks)
+    passed = sum(results)
+    if passed == len(tasks):
+        report = "[green]✓ All Green![/]"
+    elif passed == 0:
+        report = f"[red]{passed}/{len(tasks)} Responding[/]"
+    else:
+        report = f"[yellow]{passed}/{len(tasks)} Responding[/]"
+    overall.update(overall_task, description=report, completed=1)
+
+
+async def _run_sections(sections: list[Coroutine[Any, Any, None]]) -> None:
+    """Run every app section concurrently so each completes on its own."""
+    await asyncio.gather(*sections)
 
 
 def check_apps_responsive(apps: list[tuple[str, dict[str, str]]]) -> None:
@@ -593,28 +610,30 @@ def check_apps_responsive(apps: list[tuple[str, dict[str, str]]]) -> None:
 def _check_apps_responsive(
     apps: list[tuple[str, dict[str, str]]], loop: asyncio.AbstractEventLoop
 ) -> None:
-    """Render and run the responsiveness checks on a single shared event loop."""
+    """Render and run every app's checks concurrently on a shared event loop."""
+    group_items = list[ConsoleRenderable]()
+    runners = list[Coroutine[Any, Any, None]]()
+
     for app_name, instances in apps:
         if app_name == "default":
             continue
-        console.print(f"[rule.line]{app_name}:[/]")
-
         path = _health_check_path(app_name)
-        max_name_len = max(*[len(key) for key in instances if key != "local"])
-        statuses = list[progress.Progress]()
-        async_tasks = list[Coroutine[Any, Any, bool]]()
+        named = [(name, url) for name, url in instances.items() if name != "local"]
+        if not named:
+            continue
+        max_name_len = max(len(name) for name, _ in named)
 
-        for instance_name, instance_url in instances.items():
-            if instance_name == "local":
-                continue
+        group_items.append(Text("┌ ", style="rule.line") + app_name)
+        tasks = list[Coroutine[Any, Any, bool]]()
+        for instance_name, instance_url in named:
             status = progress.Progress(
                 progress.TextColumn("[rule.line]│[/]"),
                 progress.SpinnerColumn(finished_text=""),
                 progress.TextColumn("{task.description}"),
                 console=console,
             )
-            statuses.append(status)
-            async_tasks.append(
+            group_items.append(status)
+            tasks.append(
                 check_api(instance_name, instance_url, max_name_len, status, path)
             )
 
@@ -623,18 +642,13 @@ def _check_apps_responsive(
             progress.SpinnerColumn(finished_text=""),
             progress.TextColumn("{task.description}"),
             console=console,
-            transient=True,
         )
+        group_items.append(overall)
+        overall_task = overall.add_task("Checking instances...", total=1)
+        runners.append(_run_section(overall, overall_task, tasks))
 
-        group = Group(*statuses, overall)
-        live = Live(group)
-        with live:
-            task = overall.add_task("Checking instances...", total=1)
-            result = loop.run_until_complete(_gather_bools(async_tasks))
-            overall.update(task, completed=1, visible=False)
+    if not runners:
+        return
 
-            passed = len([res for res in result if res])
-            report = f"[rule.line]└[/] {passed}/{len(result)} Responding"
-            if passed == len(result):
-                report = "[rule.line]└[/] [green]✓ All Green![/]"
-        console.print(report, highlight=False)
+    with Live(Group(*group_items)):
+        loop.run_until_complete(_run_sections(runners))
