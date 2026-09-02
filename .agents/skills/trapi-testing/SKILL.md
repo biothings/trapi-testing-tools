@@ -52,9 +52,9 @@ payloads go to **stdout**, which is what makes the pipelines below work.
 
 **Run queries** (`tt test`):
 ```bash
-tt test queries/routine/v1_6 -d -e bte.local  # a version's routine battery, stop on failures, local bte
+tt test queries/routine/v1_6 -d -e retriever.local  # a version's routine battery, stop on failures, local retriever
 tt test queries/routine/v2_0/profiles/lookup -e retriever.ci  # one profile's queries (folder of symlinks)
-tt test queries/my_query.py -e bte.ci -e retriever.ci   # run against multiple environments
+tt test queries/my_query.py -e shepherd.bte.ci -e retriever.ci   # run against multiple environments
 tt test                             # no args → interactively pick query file(s) + environment(s)
 ```
 The routine set is split by TRAPI version (`queries/routine/v1_6/**`,
@@ -102,6 +102,7 @@ tt ping [app] [--all]         # check service instances are responsive
 tt norm <name…>               # resolve name(s) → CURIEs (Name Resolver); table to stderr
 tt norm -i <curie…>           # normalize CURIE(s) → canonical id/equivalents/category (Node Normalizer)
 tt norm <name> -e prod -r     # pick maturity (default test), -r/--raw prints raw JSON to stdout for piping
+tt metakg -s Gene -p affects -o Disease -e <env>  # does the env's /meta_knowledge_graph support this edge? (or pass query file(s))
 tt curl <query> -e <env>      # print the query as a curl command
 tt diff <LEFT> [RIGHT]        # TRAPI-aware, order-insensitive diff of two responses (RIGHT via stdin); TRAPI 1.6/2.0, auto-detected from schema_version or forced with --trapi-version
 tt tunnel [start|stop]        # status/prewarm/stop the shared cloudflared callback daemon used for remote async callbacks
@@ -122,11 +123,13 @@ explicitly so the fuzzy selection prompts never open.)
 
 ## Environments
 
-Selected with `-e <app>.<level>` (e.g. `bte.ci`, `retriever.local`). The bare
-`<level>` also works for the default app (`retriever`), so `-e ci` == `-e
-retriever.ci`. Apps/levels come from `DEFAULT_ENVS` in `config.py` (ars,
-retriever, shepherd, plus `nameres`/`nodenorm` for `tt norm`) merged with
-`config.yaml` (bte, aragorn). Add a service by editing `config.yaml`; change
+Selected with `-e <app>.<level>` (e.g. `shepherd.bte.ci`, `retriever.local`). The
+bare `<level>` also works for the default app (`retriever`), so `-e ci` == `-e
+retriever.ci`. Apps/levels come from `DEFAULT_ENVS` in `config.py`: `ars`,
+`gandalf`, `retriever`, the four `shepherd.<component>` apps
+(`shepherd.aragorn`/`.arax`/`.bte`/`.sipr`), plus `nameres`/`nodenorm` for `tt
+norm`. `config.yaml` is a commented template by default; uncomment its
+`environments:` block to add or override services, and change
 `default_environment` there to shorten the `-e` you type most.
 
 ## Authoring a query
