@@ -47,6 +47,19 @@ DEFAULT_ENVS = {
         "ci": "https://shepherd.ci.transltr.io/sipr",
         "test": "https://shepherd.test.transltr.io/sipr",
     },
+    # Identifier services for `tt norm` (maturities per the SmartAPI registry).
+    "nameres": {
+        "prod": "https://name-lookup.transltr.io",
+        "test": "https://name-lookup.test.transltr.io",
+        "ci": "https://name-lookup.ci.transltr.io",
+        "dev": "https://name-resolution-sri.renci.org",
+    },
+    "nodenorm": {
+        "prod": "https://nodenorm.transltr.io",
+        "ci": "https://nodenorm-es.ci.transltr.io",
+        "test": "https://nodenorm-es.test.transltr.io",
+        "dev": "https://nodenormalization-sri.renci.org",
+    },
 }
 
 

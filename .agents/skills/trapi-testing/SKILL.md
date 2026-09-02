@@ -5,9 +5,10 @@ description: >
   TRAPI services in the NCATS Translator ecosystem and to extend the tooling.
   Use when running query files (`tt test`), running analyses (`tt analyze`),
   retrieving ARS responses by PK (`tt pk`), checking service health (`tt ping`),
-  emitting curl (`tt curl`), or authoring new query files, analyses, or response
-  tests. Triggers on: TRAPI, `tt`, trapi-tools, query file, analysis, ARS PK,
-  routine tests, Translator service.
+  resolving names/normalizing CURIEs (`tt norm`), emitting curl (`tt curl`), or
+  authoring new query files, analyses, or response tests. Triggers on: TRAPI,
+  `tt`, trapi-tools, query file, analysis, ARS PK, routine tests, Translator
+  service, name resolution, node normalization, CURIE lookup.
 license: MIT
 ---
 
@@ -97,6 +98,9 @@ tt pk <PK> [--ara <name>]     # drill an ARS PK down to one ARA's stored respons
 tt pk <PK> --trace/-t         # skip the drill-down; show the overall ARS trace + per-actor metadata (incl. merge counts)
 tt pk <PK> --raw/-r           # after picking a child, skip TRAPI extraction; emit the raw ARS stored response
 tt ping [app] [--all]         # check service instances are responsive
+tt norm <name…>               # resolve name(s) → CURIEs (Name Resolver); table to stderr
+tt norm -i <curie…>           # normalize CURIE(s) → canonical id/equivalents/category (Node Normalizer)
+tt norm <name> -e prod -r     # pick maturity (default test), -r/--raw prints raw JSON to stdout for piping
 tt curl <query> -e <env>      # print the query as a curl command
 tt diff <LEFT> [RIGHT]        # TRAPI-aware, order-insensitive diff of two responses (RIGHT via stdin); TRAPI 1.6/2.0, auto-detected from schema_version or forced with --trapi-version
 tt tunnel [start|stop]        # status/prewarm/stop the shared cloudflared callback daemon used for remote async callbacks
@@ -120,9 +124,9 @@ explicitly so the fuzzy selection prompts never open.)
 Selected with `-e <app>.<level>` (e.g. `bte.ci`, `retriever.local`). The bare
 `<level>` also works for the default app (`retriever`), so `-e ci` == `-e
 retriever.ci`. Apps/levels come from `DEFAULT_ENVS` in `config.py` (ars,
-retriever, shepherd) merged with `config.yaml` (bte, aragorn). Add a service by
-editing `config.yaml`; change `default_environment` there to shorten the `-e`
-you type most.
+retriever, shepherd, plus `nameres`/`nodenorm` for `tt norm`) merged with
+`config.yaml` (bte, aragorn). Add a service by editing `config.yaml`; change
+`default_environment` there to shorten the `-e` you type most.
 
 ## Authoring a query
 

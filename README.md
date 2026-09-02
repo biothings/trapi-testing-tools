@@ -132,6 +132,34 @@ tt diff baseline.json new.json --json -p | jq '.summary'
 tt diff baseline.json new.json --trapi-version 2.0
 ```
 
+### Normalizing identifiers
+
+`tt norm` is a quick lookup against Translator's identifier services. By default it resolves
+names to CURIEs (Name Resolver); `-i`/`--id` switches to CURIE normalization (Node
+Normalizer). Both run against a chosen maturity with `-e` (default `test`); results print
+as a table, and `-r`/`--raw` emits the raw service JSON to stdout for piping.
+
+```bash
+# name -> CURIEs
+tt norm imatinib
+tt norm "type 2 diabetes" -n 5 -t Disease   # limit hits, filter by Biolink category
+
+# CURIE -> canonical id, categories, and equivalents
+tt norm -i MONDO:0005148
+tt norm -i MONDO:0005148 CHEBI:45783         # multiple: summary table
+
+# pick a maturity (test | ci | dev | prod)
+tt norm imatinib -e prod
+
+# raw JSON for scripting / chaining
+tt norm imatinib -r | jq -r '.[0].curie'
+tt norm imatinib -r | jq -r '.[0].curie' | tt norm -i -r | jq
+```
+
+The `nameres` and `nodenorm` services live in the environment config (maturities sourced
+from the SmartAPI registry) and can be overridden in `config.yaml` like any other
+environment.
+
 ## Writing a query
 
 You can add your own queries to be used in `tt test`, the specification is relatively

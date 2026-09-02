@@ -14,3 +14,10 @@
 # environments:
 #   myapp:
 #     dev: https://dev.example.org
+
+# `tt norm` uses the built-in `nameres` and `nodenorm` environments (maturities from
+# the SmartAPI registry); pick one with `-e <maturity>` (default: test). Override or add
+# instances the same way as any other environment, e.g.:
+# environments:
+#   nodenorm:
+#     test: https://nodenorm.test.example.org

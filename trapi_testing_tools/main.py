@@ -12,6 +12,7 @@ from typer.core import TyperGroup
 from trapi_testing_tools.commands.analyze import app as analyze_app
 from trapi_testing_tools.commands.curl import app as curl_app
 from trapi_testing_tools.commands.diff import app as diff_app
+from trapi_testing_tools.commands.norm import app as norm_app
 from trapi_testing_tools.commands.ping import app as ping_app
 from trapi_testing_tools.commands.pk import app as pk_app
 from trapi_testing_tools.commands.test import app as test_app
@@ -50,6 +51,7 @@ app.add_typer(test_app)
 app.add_typer(analyze_app)
 app.add_typer(diff_app)
 app.add_typer(ping_app)
+app.add_typer(norm_app)
 app.add_typer(pk_app)
 app.add_typer(curl_app)
 app.add_typer(tunnel_app)
