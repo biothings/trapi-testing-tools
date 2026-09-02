@@ -109,7 +109,7 @@ def norm(  # noqa: PLR0913
         typer.Option(
             "--limit",
             "-n",
-            help="Hits per name to fetch and show (name mode); "
+            help="Rows to show — name hits or CURIE equivalents; "
             "default shows the top 5.",
         ),
     ] = None,
@@ -169,7 +169,10 @@ def norm(  # noqa: PLR0913
                 drug_chemical_conflate=drug_chemical_conflate,
             )
         )
-        print(json.dumps(nodes)) if raw else render_curies(nodes)
+        if raw:
+            print(json.dumps(nodes))
+        else:
+            render_curies(nodes, truncate=limit if limit is not None else TOP_N)
     else:
         base_url = _resolve_service_url("nameres", environment)
         fetch_limit = limit if limit is not None else DEFAULT_LIMIT
