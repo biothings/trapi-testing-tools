@@ -32,6 +32,7 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.segment import Segment
 from rich.styled import Styled
+from rich.table import Table
 from rich.text import Text
 from translator_tom import TOMBase
 
@@ -103,13 +104,16 @@ class _Gutter:
 
 
 class IndentedBlock(RenderHook):
-    """Render text as an indented block with a ``│ `` gutter on every wrapped line."""
+    """Render block content with a ``│ `` gutter on every wrapped line."""
 
     @override
     def process_renderables(
         self, renderables: list[ConsoleRenderable]
     ) -> list[ConsoleRenderable]:
-        return [_Gutter(r) if isinstance(r, Text | Panel) else r for r in renderables]
+        return [
+            _Gutter(r) if isinstance(r, Text | Panel | Table) else r
+            for r in renderables
+        ]
 
 
 class _CommentStyle(RenderHook):

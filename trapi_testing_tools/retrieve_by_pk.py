@@ -1,5 +1,6 @@
 import ast
 import asyncio
+import json
 from collections import Counter
 from contextlib import redirect_stdout
 from http import HTTPStatus
@@ -11,13 +12,16 @@ import httpx
 from InquirerPy.prompts.confirm import ConfirmPrompt
 from InquirerPy.prompts.fuzzy import FuzzyPrompt
 from rich import box, progress
-from rich.console import Console
 from rich.table import Table
+from rich.text import Text
 
+from tests.battery import standard_battery
 from trapi_testing_tools.config import CONFIG
-from trapi_testing_tools.utils import handle_output
+from trapi_testing_tools.console import console
+from trapi_testing_tools.run_query import run_tests
+from trapi_testing_tools.types import Query
+from trapi_testing_tools.utils import IndentedBlock, handle_output
 
-console = Console(stderr=True)
 client = httpx.AsyncClient(follow_redirects=True, timeout=300)
 
 ARS_MESSAGES_PATH = "/ars/api/messages"
@@ -165,11 +169,14 @@ def _status_style(status: str | None) -> str:
     return "yellow"
 
 
-def print_ars_metadata(body: dict[str, Any], merge_count: int | None = None) -> None:
+def print_ars_metadata(
+    body: dict[str, Any], merge_count: int | None = None, *, left_align: bool = False
+) -> None:
     """Print key ARS metadata from a raw ARS stored response to the terminal.
 
     `merge_count` is the number of times this ARA was merged into the parent PK,
     derived from the parent trace since a child response omits its own history.
+    `left_align` left-justifies the label column and title (for the triage block).
     """
     fields: dict[str, Any] = body.get("fields", {})
     data: dict[str, Any] = fields.get("data", {})
@@ -183,12 +190,15 @@ def print_ars_metadata(body: dict[str, Any], merge_count: int | None = None) -> 
         results = len(message.get("results") or [])
 
     table = Table(
-        title="ARS Response Metadata",
+        title=None if left_align else "ARS Response Metadata",
         title_style="bold",
-        box=box.SIMPLE,
+        box=None if left_align else box.SIMPLE,
         show_header=False,
+        pad_edge=not left_align,
     )
-    table.add_column("Field", style="rule.line", justify="right")
+    table.add_column(
+        "Field", style="rule.line", justify="left" if left_align else "right"
+    )
     table.add_column("Value", overflow="fold")
 
     table.add_row("PK", str(body.get("pk", "—")))
@@ -302,6 +312,98 @@ def handle_error(msg: str, error: Exception) -> None:
     with redirect_stdout(stderr):
         if ConfirmPrompt("Print traceback for this error?", default=False).execute():
             console.print_exception(show_locals=True)
+
+
+def _ara_children(trace: dict[str, Any]) -> list[dict[str, Any]]:
+    """The trace's ARA child actors (those whose agent name marks them as an ARA)."""
+    return [
+        child
+        for child in trace.get("children") or []
+        if "ara" in str((child.get("actor") or {}).get("agent") or "")
+    ]
+
+
+async def _fetch_actor_response(
+    target_url: str, child: dict[str, Any]
+) -> tuple[str, dict[str, Any] | None, Exception | None]:
+    """Fetch one actor's stored response, returning (agent, body, error)."""
+    agent = str(child["actor"]["agent"])
+    try:
+        response = await client.get(
+            f"{_ars_messages_url(target_url)}/{child['message']}"
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as error:
+        return agent, None, error
+    return agent, response.json(), None
+
+
+def _fetch_all_actor_responses(
+    target_url: str, children: list[dict[str, Any]]
+) -> list[tuple[str, dict[str, Any] | None, Exception | None]]:
+    """Concurrently fetch every actor's stored response."""
+    with console.status("Retrieving all ARA responses..."):
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(
+            asyncio.gather(*(_fetch_actor_response(target_url, c) for c in children))
+        )
+
+
+def _run_battery(payload: dict[str, Any]) -> tuple[int, int]:
+    """Run the standard battery against a payload, printing tt-test-style lines.
+
+    Returns the (passed, failed) counts.
+    """
+    http_response = httpx.Response(200, content=json.dumps(payload).encode())
+    query = Query(tests=standard_battery())
+    passed, failed, _ = run_tests(query, http_response)
+    return passed, failed
+
+
+def _battery_verdict(passed: int, failed: int) -> str:
+    """Format the `└`-line verdict for one ARA's battery (mirrors the test runner)."""
+    if failed == 0:
+        return "[green]✓ Passed[/]"
+    message = f"[red]X Failed[/] {failed}"
+    if passed > 0:
+        message += f"[white] ─ [/][green]Passed[/] {passed}"
+    return message
+
+
+def run_triage(pk: str) -> None:
+    """Retrieve every ARA response for a PK and show metadata + battery for each."""
+    try:
+        target_url, trace_body = get_ars_trace(pk)
+        if target_url == "":
+            return
+    except httpx.HTTPError as error:
+        handle_error("Failed to get ARS trace for pk", error)
+        return
+
+    print_trace_metadata(trace_body)
+
+    children = _ara_children(trace_body)
+    if not children:
+        console.print("No ARA actors found in trace.")
+        return
+
+    merge_counts = _merge_counts(trace_body)
+    for agent, body, error in _fetch_all_actor_responses(target_url, children):
+        console.rule(
+            Text("┌ ", style="rule.line") + agent.removeprefix("ara-"), align="left"
+        )
+        if body is None:
+            console.print(f"└ [red]failed to retrieve: {error!r}[/]", style="rule.line")
+            continue
+
+        console.push_render_hook(IndentedBlock())
+        print_ars_metadata(body, merge_counts.get(agent, 0), left_align=True)
+        passed, failed = _run_battery(extract_response_payload(body))
+        console.pop_render_hook()
+
+        console.print(
+            f"└ {_battery_verdict(passed, failed)}", style="rule.line", markup=True
+        )
 
 
 def get_response_from_pk(  # noqa:PLR0913

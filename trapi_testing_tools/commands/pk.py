@@ -3,7 +3,7 @@ from typing import Annotated
 
 import typer
 
-from trapi_testing_tools.retrieve_by_pk import get_response_from_pk
+from trapi_testing_tools.retrieve_by_pk import get_response_from_pk, run_triage
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -63,6 +63,15 @@ def pk(  # noqa:PLR0913
             help="Present the overall ARS trace.",
         ),
     ] = False,
+    triage: Annotated[
+        bool,
+        typer.Option(
+            "--triage",
+            "-T",
+            help="Retrieve every ARA response and show metadata + standard battery "
+            "for each.",
+        ),
+    ] = False,
     raw: Annotated[
         bool,
         typer.Option(
@@ -73,6 +82,10 @@ def pk(  # noqa:PLR0913
     ] = False,
 ) -> None:
     """Drill down into ARS PK to get a response of interest."""
+    if triage:
+        run_triage(pk)
+        return
+
     view_mode = "prompt"
     save_mode = "prompt"
     if view is not None:

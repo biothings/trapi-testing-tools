@@ -97,6 +97,7 @@ identify which run is which.
 tt pk <PK> [--ara <name>]     # drill an ARS PK down to one ARA's stored response
 tt pk <PK> --trace/-t         # skip the drill-down; show the overall ARS trace + per-actor metadata (incl. merge counts)
 tt pk <PK> --raw/-r           # after picking a child, skip TRAPI extraction; emit the raw ARS stored response
+tt pk <PK> --triage/-T        # fetch EVERY ARA response; per-actor metadata + standard battery in a tt-test-style block
 tt ping [app] [--all]         # check service instances are responsive
 tt norm <name…>               # resolve name(s) → CURIEs (Name Resolver); table to stderr
 tt norm -i <curie…>           # normalize CURIE(s) → canonical id/equivalents/category (Node Normalizer)
