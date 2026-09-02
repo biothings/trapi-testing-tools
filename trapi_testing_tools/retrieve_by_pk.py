@@ -170,13 +170,13 @@ def _status_style(status: str | None) -> str:
 
 
 def print_ars_metadata(
-    body: dict[str, Any], merge_count: int | None = None, *, left_align: bool = False
+    body: dict[str, Any], merge_count: int | None = None, *, show_pk: bool = True
 ) -> None:
     """Print key ARS metadata from a raw ARS stored response to the terminal.
 
     `merge_count` is the number of times this ARA was merged into the parent PK,
     derived from the parent trace since a child response omits its own history.
-    `left_align` left-justifies the label column and title (for the triage block).
+    `show_pk` omits the PK row when the caller already surfaces it in a header.
     """
     fields: dict[str, Any] = body.get("fields", {})
     data: dict[str, Any] = fields.get("data", {})
@@ -189,19 +189,12 @@ def print_ars_metadata(
     if results is None:
         results = len(message.get("results") or [])
 
-    table = Table(
-        title=None if left_align else "ARS Response Metadata",
-        title_style="bold",
-        box=None if left_align else box.SIMPLE,
-        show_header=False,
-        pad_edge=not left_align,
-    )
-    table.add_column(
-        "Field", style="rule.line", justify="left" if left_align else "right"
-    )
+    table = Table(box=None, show_header=False, pad_edge=False)
+    table.add_column("Field", style="rule.line", justify="left")
     table.add_column("Value", overflow="fold")
 
-    table.add_row("PK", str(body.get("pk", "—")))
+    if show_pk:
+        table.add_row("PK", str(body.get("pk", "—")))
     table.add_row("ARA", str(fields.get("name") or "—"))
     table.add_row(
         "ARS Status",
@@ -238,22 +231,36 @@ def print_ars_metadata(
     console.print(table)
 
 
-def print_trace_metadata(trace: dict[str, Any]) -> None:
-    """Print key ARS metadata from a raw ARS trace to the terminal."""
+def print_status_close(status: str | None) -> None:
+    """Print the `└ <status>` line closing an indented metadata block.
+
+    Callers emit this after any view/save interaction so the prompt can't clobber it.
+    """
+    console.print(
+        f"└ [{_status_style(status)}]{status or '—'}[/]",
+        style="rule.line",
+        markup=True,
+    )
+
+
+def print_trace_metadata(trace: dict[str, Any]) -> str | None:
+    """Print key ARS metadata from a raw ARS trace; returns the trace status.
+
+    The caller prints the closing `└` line (via `print_status_close`) once any
+    view/save interaction is done, so an interactive prompt can't overwrite it.
+    """
     children: list[dict[str, Any]] = trace.get("children") or []
     status = trace.get("status")
     merge_counts = _merge_counts(trace)
+    pk = str(trace.get("pk") or trace.get("message") or "—")
 
-    table = Table(
-        title="ARS Trace Metadata",
-        title_style="bold",
-        box=box.SIMPLE,
-        show_header=False,
-    )
-    table.add_column("Field", style="rule.line", justify="right")
+    console.print(Text("┌ ", style="rule.line") + f"ARS Trace Metadata · {pk}")
+    console.push_render_hook(IndentedBlock())
+
+    table = Table(box=None, show_header=False, pad_edge=False)
+    table.add_column("Field", style="rule.line", justify="left")
     table.add_column("Value", overflow="fold")
 
-    table.add_row("PK", str(trace.get("pk") or trace.get("message") or "—"))
     table.add_row(
         "Status",
         f"[{_status_style(status)}]{status or '—'}[/]",
@@ -264,38 +271,36 @@ def print_trace_metadata(trace: dict[str, Any]) -> None:
 
     console.print(table)
 
-    if not children:
-        return
+    if children:
+        console.print(Text(""))
+        actor_table = Table(box=box.SIMPLE, pad_edge=False, show_edge=False)
+        actor_table.add_column("Actor", overflow="fold")
+        actor_table.add_column("Status")
+        actor_table.add_column("Code", justify="right")
+        actor_table.add_column("Results", justify="right")
+        actor_table.add_column("Merges", justify="right")
 
-    actor_table = Table(
-        title="Actors",
-        title_style="bold",
-        box=box.SIMPLE,
-    )
-    actor_table.add_column("Actor", overflow="fold")
-    actor_table.add_column("Status")
-    actor_table.add_column("Code", justify="right")
-    actor_table.add_column("Results", justify="right")
-    actor_table.add_column("Merges", justify="right")
+        for child in children:
+            actor = child.get("actor") or {}
+            child_status = child.get("status")
+            agent_full = str(actor.get("agent") or "")
+            agent = agent_full.removeprefix("ara-").removeprefix("kp-") or "—"
+            actor_table.add_row(
+                agent,
+                f"[{_status_style(child_status)}]{child_status or '—'}[/]",
+                str(child.get("code") if child.get("code") is not None else "—"),
+                str(
+                    child.get("result_count")
+                    if child.get("result_count") is not None
+                    else "—"
+                ),
+                str(merge_counts.get(agent_full, 0)),
+            )
 
-    for child in children:
-        actor = child.get("actor") or {}
-        child_status = child.get("status")
-        agent_full = str(actor.get("agent") or "")
-        agent = agent_full.removeprefix("ara-").removeprefix("kp-") or "—"
-        actor_table.add_row(
-            agent,
-            f"[{_status_style(child_status)}]{child_status or '—'}[/]",
-            str(child.get("code") if child.get("code") is not None else "—"),
-            str(
-                child.get("result_count")
-                if child.get("result_count") is not None
-                else "—"
-            ),
-            str(merge_counts.get(agent_full, 0)),
-        )
+        console.print(actor_table)
 
-    console.print(actor_table)
+    console.pop_render_hook()
+    return status
 
 
 def extract_response_payload(body: dict[str, Any]) -> dict[str, Any]:
@@ -380,7 +385,7 @@ def run_triage(pk: str) -> None:
         handle_error("Failed to get ARS trace for pk", error)
         return
 
-    print_trace_metadata(trace_body)
+    print_status_close(print_trace_metadata(trace_body))
 
     children = _ara_children(trace_body)
     if not children:
@@ -397,7 +402,7 @@ def run_triage(pk: str) -> None:
             continue
 
         console.push_render_hook(IndentedBlock())
-        print_ars_metadata(body, merge_counts.get(agent, 0), left_align=True)
+        print_ars_metadata(body, merge_counts.get(agent, 0))
         passed, failed = _run_battery(extract_response_payload(body))
         console.pop_render_hook()
 
@@ -427,8 +432,9 @@ def get_response_from_pk(  # noqa:PLR0913
         return
 
     if trace:
-        print_trace_metadata(trace_body)
+        status = print_trace_metadata(trace_body)
         handle_output(trace_body, view_mode, save_mode, save_path, subject="trace")
+        print_status_close(status)
         return
 
     try:
@@ -438,7 +444,15 @@ def get_response_from_pk(  # noqa:PLR0913
         return
 
     merge_count = _merge_counts(trace_body).get(selected_agent, 0)
-    print_ars_metadata(body, merge_count)
+    console.print(
+        Text("┌ ", style="rule.line")
+        + f"ARS Response Metadata · {body.get('pk', '—')}"
+    )
+    console.push_render_hook(IndentedBlock())
+    print_ars_metadata(body, merge_count, show_pk=False)
+    console.pop_render_hook()
     payload = body if raw else extract_response_payload(body)
 
     handle_output(payload, view_mode, save_mode, save_path)
+
+    print_status_close(body.get("fields", {}).get("status"))
