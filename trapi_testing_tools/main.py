@@ -11,6 +11,7 @@ from typer.core import TyperGroup
 
 from trapi_testing_tools.commands.analyze import app as analyze_app
 from trapi_testing_tools.commands.curl import app as curl_app
+from trapi_testing_tools.commands.diff import app as diff_app
 from trapi_testing_tools.commands.harness import app as harness_app
 from trapi_testing_tools.commands.ping import app as ping_app
 from trapi_testing_tools.commands.pk import app as pk_app
@@ -50,6 +51,7 @@ app = typer.Typer(
 app.add_typer(test_app)
 app.add_typer(analyze_app)
 app.add_typer(validate_app)
+app.add_typer(diff_app)
 app.add_typer(ping_app)
 app.add_typer(harness_app)
 app.add_typer(pk_app)
