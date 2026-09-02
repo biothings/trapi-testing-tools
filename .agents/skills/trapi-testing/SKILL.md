@@ -56,6 +56,7 @@ tt test queries/routine/v1_6 -d -e retriever.local  # a version's routine batter
 tt test queries/routine/v2_0/profiles/lookup -e retriever.ci  # one profile's queries (folder of symlinks)
 tt test queries/my_query.py -e shepherd.bte.ci -e retriever.ci   # run against multiple environments
 tt test                             # no args → interactively pick query file(s) + environment(s)
+tt test queries/my_query.py -e retriever.ci --against responses/baseline.json  # run, then diff the response vs a baseline
 ```
 The routine set is split by TRAPI version (`queries/routine/v1_6/**`,
 `queries/routine/v2_0/**`); under each version, queries live in
@@ -91,6 +92,13 @@ emits one `RunReport` envelope (per-query/step status, tests, timing, size — n
 `-p` keeps only failing responses. Multiple `-e` run every query against
 every environment; the envelope's top-level `envs` and each query's `env`
 identify which run is which.
+
+**Diff a run against a baseline** (`--against/-a <file>`): after the normal run,
+structurally diffs the run's **final** response against `<file>` (reusing `tt diff`) — the
+summary prints to stderr and you're offered to view/save the colored plaintext report. With
+`--pipe`, the plaintext diff replaces the pipe payload on stdout. Only the final response is
+diffed (the last step, or the last produced response across multiple queries/environments).
+Remembered by `-R`.
 
 **Other commands:**
 ```bash

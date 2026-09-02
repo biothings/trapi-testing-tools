@@ -27,6 +27,7 @@ _REPEATABLE_PARAMS = (
     "save",
     "no_save",
     "pipe",
+    "against",
 )
 
 console = Console(stderr=True)
@@ -42,7 +43,7 @@ def _coerce_persisted(name: str, value: Any) -> Any:
         return None
     if name == "queries":
         return [Path(part) for part in value]
-    if name == "save":
+    if name in ("save", "against"):
         return Path(value)
     if name == "pipe":
         return PipeMode(value)
@@ -59,6 +60,7 @@ def _apply_repeat(  # noqa: PLR0913
     save: Path | None,
     no_save: bool,
     pipe: PipeMode | None,
+    against: Path | None,
 ) -> tuple[
     list[Path] | None,
     list[str] | None,
@@ -67,6 +69,7 @@ def _apply_repeat(  # noqa: PLR0913
     Path | None,
     bool,
     PipeMode | None,
+    Path | None,
 ]:
     """Fill un-typed ``test()`` params from the last saved invocation (for ``--repeat``).
 
@@ -82,6 +85,7 @@ def _apply_repeat(  # noqa: PLR0913
         "save": save,
         "no_save": no_save,
         "pipe": pipe,
+        "against": against,
     }
     typed = {
         name
@@ -111,6 +115,7 @@ def _apply_repeat(  # noqa: PLR0913
         current["save"],
         current["no_save"],
         current["pipe"],
+        current["against"],
     )
 
 
@@ -191,6 +196,15 @@ def test(  # noqa: PLR0913
             "auto, tunnel, direct, or poll.",
         ),
     ] = None,
+    against: Annotated[
+        Path | None,
+        typer.Option(
+            "--against",
+            "-a",
+            help="Diff the run's final response against this TRAPI response file "
+            "(structural). Overrides any --pipe output with the diff.",
+        ),
+    ] = None,
 ) -> None:
     """Run one or more queries against one or more environments."""
     used_interactive = False
@@ -204,6 +218,7 @@ def test(  # noqa: PLR0913
             save,
             no_save,
             pipe,
+            against,
         ) = _apply_repeat(
             ctx,
             queries=queries,
@@ -213,6 +228,7 @@ def test(  # noqa: PLR0913
             save=save,
             no_save=no_save,
             pipe=pipe,
+            against=against,
         )
 
     queries, used_interactive = set_queries(queries)
@@ -231,6 +247,7 @@ def test(  # noqa: PLR0913
             "save": str(save) if save is not None else None,
             "no_save": no_save,
             "pipe": pipe.value if pipe is not None else None,
+            "against": str(against) if against is not None else None,
         }
     )
 
@@ -249,6 +266,8 @@ def test(  # noqa: PLR0913
             opts.append(f"-p {pipe.value}")
         if callback_mode is not None:
             opts.append(f"--cb {callback_mode.value}")
+        if against is not None:
+            opts.append(f"--against {against}")
         console.print(
             f"\\[Hint] Re-run this command more quickly using: tt test {' '.join(opts)} {' '.join(str(q.relative_to(Path.cwd())) for q in queries)}"
             " (or just: tt test -R)",
@@ -266,6 +285,7 @@ def test(  # noqa: PLR0913
         debug,
         pipe,
         callback_mode=callback_mode,
+        against=against,
     )
 
     if not passed:

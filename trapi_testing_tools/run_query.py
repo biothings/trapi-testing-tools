@@ -11,6 +11,11 @@ from rich.panel import Panel
 from rich.text import Text
 
 import trapi_testing_tools
+from trapi_testing_tools.analyze import (
+    detect_response_version,
+    parse_response,
+    read_response_bytes,
+)
 from trapi_testing_tools.callback import (
     PLACEHOLDER_CALLBACK,
     CallbackSession,
@@ -18,6 +23,13 @@ from trapi_testing_tools.callback import (
     make_synthetic_response,
 )
 from trapi_testing_tools.config import CONFIG
+from trapi_testing_tools.diff import (
+    colorize_report,
+    diff_responses,
+    render_report,
+    render_text_report,
+    render_verdict,
+)
 from trapi_testing_tools.report import (
     PipeMode,
     QueryResult,
@@ -31,7 +43,11 @@ from trapi_testing_tools.report import (
     emit_report,
     pre_run_failure,
 )
-from trapi_testing_tools.trapi_models import use_version
+from trapi_testing_tools.trapi_models import (
+    DEFAULT_TRAPI_VERSION,
+    TrapiVersion,
+    use_version,
+)
 from trapi_testing_tools.types import FollowUp, OutputModes, Query
 from trapi_testing_tools.utils import (
     IndentedBlock,
@@ -53,7 +69,7 @@ CLIENT = httpx.Client(
 _MAX_STATUS_NOT_FOUND = 3
 
 
-def run_queries(  # noqa: PLR0913
+def run_queries(  # noqa: PLR0913, PLR0912
     files: list[Path],
     targets: list[tuple[str, str]],
     output_modes: OutputModes,
@@ -61,6 +77,7 @@ def run_queries(  # noqa: PLR0913
     on_fail: bool = False,
     pipe_mode: PipeMode | None = None,
     callback_mode: str | None = None,
+    against: Path | None = None,
 ) -> bool:
     """Given a set of queries, run each against each target environment.
 
@@ -68,10 +85,21 @@ def run_queries(  # noqa: PLR0913
     every target, sequentially. Returns ``True`` only if every run passed. When
     piping (``pipe_mode`` set), stdout gets either the response body/bodies
     (`PipeMode.plain`) or one aggregate `RunReport` envelope (`report`/`full`).
+
+    When ``against`` is given, the run's final response is structurally diffed against
+    that baseline file: the summary goes to stderr, and (when piping) the plaintext diff
+    report replaces the pipe payload on stdout.
     """
     collect = output_modes[0] == "pipe"  # only collect responses on pipe (save mem)
     report_queries: list[QueryResult] = []
     run_start = time.monotonic()
+
+    against_bytes, against_source = (
+        read_response_bytes(against) if against is not None else (b"", "")
+    )
+    last_final: httpx.Response | None = None
+    last_version: TrapiVersion | None = None
+    last_label = ""
 
     all_passed = True
     multiple = len(files) > 1 or len(targets) > 1
@@ -122,7 +150,7 @@ def run_queries(  # noqa: PLR0913
                     query_save_path = query_save_path.with_name(
                         f"{prefix}_{query_save_path.name}"
                     )
-                passed, result = manage_query(
+                passed, result, (final_response, final_version) = manage_query(
                     query,
                     url,
                     env,
@@ -136,8 +164,11 @@ def run_queries(  # noqa: PLR0913
                     all_passed = False
                 if collect and result is not None:
                     report_queries.append(result)
+                if final_response is not None:
+                    last_final, last_version = final_response, final_version
+                    last_label = f"{qualified} · {env}"
 
-    if collect:
+    if collect and against is None:
         emit_report(
             report_queries,
             [env for env, _url in targets],
@@ -145,7 +176,70 @@ def run_queries(  # noqa: PLR0913
             time.monotonic() - run_start,
             pipe_mode or PipeMode.full,
         )
+
+    if against is not None:
+        # Offer to view/save the diff, but never reuse the response's save path (avoid clobber).
+        diff_view_mode = "skip" if output_modes[0] == "skip" else "prompt"
+        diff_save_mode = "skip" if output_modes[1] == "skip" else "prompt"
+        _emit_diff(
+            against_bytes,
+            against_source,
+            str(against),
+            last_final,
+            last_version,
+            last_label,
+            pipe_mode,
+            diff_view_mode,
+            diff_save_mode,
+        )
+
     return all_passed
+
+
+def _emit_diff(  # noqa: PLR0913
+    against_bytes: bytes,
+    against_source: str,
+    against_name: str,
+    response: httpx.Response | None,
+    version: TrapiVersion | None,
+    response_label: str,
+    pipe_mode: PipeMode | None,
+    view_mode: Literal["prompt", "skip", "every", "pipe"],
+    save_mode: Literal["prompt", "skip", "every"],
+) -> None:
+    """Diff the run's final ``response`` against the baseline, per ``against`` semantics.
+
+    The capped structural summary always prints to stderr; when piping, the full plaintext
+    report is also written to stdout, overriding the normal pipe payload. Otherwise the
+    report is passed to `handle_output`, offering to view (the full report) and/or save it.
+    """
+    if response is None:
+        console.print("No response was produced to diff against.", style="yellow")
+        return
+
+    version = version or detect_response_version(against_bytes) or DEFAULT_TRAPI_VERSION
+    left = parse_response(against_bytes, against_source, version)
+    right = parse_response(response.content, "response", version)
+
+    deltas = diff_responses(left, right, strict=True, version=version)
+    render_report(deltas, strict=True)
+
+    report = render_text_report(
+        deltas, strict=True, left_name=against_name, right_name=response_label
+    )
+    if pipe_mode is not None:
+        print(report)
+    else:
+        handle_output(
+            report,
+            view_mode,
+            save_mode,
+            None,
+            subject="diff",
+            view_transform=colorize_report,
+        )
+
+    render_verdict(deltas)
 
 
 @dataclass
@@ -161,6 +255,7 @@ class _RunState:
     any_tests: bool = False
     query_elapsed: float = 0.0
     final_response: httpx.Response | None = None
+    trapi_version: TrapiVersion | None = None
     history: list[StepRecord] = field(default_factory=list)
 
 
@@ -178,6 +273,7 @@ def _run_step(
     while True:
         # A FollowUp is built from prior results; a build error becomes a no-response step.
         query, run, bail_reason = _resolve_step(step, state.history, url)
+        state.trapi_version = query.trapi_version
         if run is None:
             run = run_query(query, url, session)
         state.final_response = run.response
@@ -237,11 +333,12 @@ def manage_query(  # noqa: PLR0913
     on_fail: bool,
     pipe_mode: PipeMode | None,
     session: CallbackSession | None = None,
-) -> tuple[bool, QueryResult | None]:
+) -> tuple[bool, QueryResult | None, tuple[httpx.Response | None, TrapiVersion | None]]:
     """Interpret query as single or multiple and manage steps in running it.
 
-    Returns whether the query (and any tests it defines) passed, plus a
-    `QueryResult` when piping (for the aggregate report), else ``None``.
+    Returns whether the query (and any tests it defines) passed, a `QueryResult` when
+    piping (for the aggregate report) else ``None``, and the run's final response with its
+    TRAPI version (for ``--against`` diffing).
     """
     collect = output_modes[0] == "pipe"
 
@@ -274,7 +371,7 @@ def manage_query(  # noqa: PLR0913
                 if collect
                 else None
             )
-            return False, result
+            return False, result, (state.final_response, state.trapi_version)
 
     console.pop_render_hook()
 
@@ -305,7 +402,7 @@ def manage_query(  # noqa: PLR0913
         if collect
         else None
     )
-    return state.query_passed, result
+    return state.query_passed, result, (state.final_response, state.trapi_version)
 
 
 def _emit_output(

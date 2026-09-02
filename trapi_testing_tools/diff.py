@@ -50,7 +50,7 @@ KIND_STYLE = {
 }
 
 # Cap the number of individual differences listed per section in the rich stderr view.
-MAX_SHOWN = 25
+MAX_SHOWN = 3
 
 # Report sections, in display order, with a human label each.
 SECTION_ORDER = (
@@ -320,16 +320,41 @@ def render_report(deltas: list[Delta], *, strict: bool) -> None:
                 console.print(f"  {_diff_line(rest, delta)}", highlight=False)
             if len(entries) > MAX_SHOWN:
                 console.print(
-                    f"  [bright_black]… {len(entries) - MAX_SHOWN} more[/]",
+                    f"  [bright_black]+{len(entries) - MAX_SHOWN} more[/]",
                     highlight=False,
                 )
     finally:
         console.pop_render_hook()
 
-    totals = _totals(groups)
+
+# ANSI SGR codes for coloring the plaintext report by leading marker (for the pager view).
+_ANSI_RESET = "\x1b[0m"
+_ANSI_BOLD = "\x1b[1m"
+_ANSI_DIM = "\x1b[90m"
+_ANSI_KIND = {"+": "\x1b[32m", "-": "\x1b[31m", "~": "\x1b[33m", "⇄": "\x1b[36m"}
+
+
+def colorize_report(report: str) -> str:
+    """Add ANSI color to a plaintext diff report, line by line, for a color-aware pager."""
+    lines = []
+    for line in report.splitlines():
+        if line.startswith(("--- ", "+++ ")) or line.startswith("@@"):
+            lines.append(f"{_ANSI_BOLD}{line}{_ANSI_RESET}")
+        elif line.startswith("#"):
+            lines.append(f"{_ANSI_DIM}{line}{_ANSI_RESET}")
+        elif line[:1] in _ANSI_KIND:
+            lines.append(f"{_ANSI_KIND[line[:1]]}{line}{_ANSI_RESET}")
+        else:
+            lines.append(line)
+    return "\n".join(lines)
+
+
+def render_verdict(deltas: list[Delta]) -> None:
+    """Print the closing summary line (kept separate so it can follow view/save output)."""
+    totals = _totals(_group(deltas))
     verdict = "[green]identical[/]" if not deltas else _counts_markup(totals)
     console.print(
-        f"[rule.line]└[/] {verdict}  [bright_black](left = baseline, right = new)[/]",
+        f"[rule.line]└[/] {verdict}",
         markup=True,
         highlight=False,
     )

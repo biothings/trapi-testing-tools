@@ -15,9 +15,11 @@ from trapi_testing_tools.analyze import (
 from trapi_testing_tools.commands.utils import set_output_modes
 from trapi_testing_tools.diff import (
     build_report,
+    colorize_report,
     diff_responses,
     render_report,
     render_text_report,
+    render_verdict,
 )
 from trapi_testing_tools.trapi_models import (
     DEFAULT_TRAPI_VERSION,
@@ -222,4 +224,12 @@ def diff(  # noqa: PLR0913
             full=full,
         )
     )
-    handle_output(report, view_mode, save_mode, save, subject="report")
+    handle_output(
+        report,
+        view_mode,
+        save_mode,
+        save,
+        subject="report",
+        view_transform=None if json_output else colorize_report,
+    )
+    render_verdict(deltas)

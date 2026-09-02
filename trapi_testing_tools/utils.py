@@ -3,7 +3,7 @@ import json
 import shutil
 import subprocess
 import zipfile
-from collections.abc import Coroutine, Iterator
+from collections.abc import Callable, Coroutine, Iterator
 from contextlib import contextmanager, redirect_stdout
 from dataclasses import replace
 from http import HTTPStatus
@@ -161,14 +161,19 @@ def should_output(
         ).execute()
 
 
-def handle_output(
+def handle_output(  # noqa: PLR0913
     output: object | None,
     view_mode: Literal["prompt", "skip", "every", "pipe"],
     save_mode: Literal["prompt", "skip", "every"],
     save_path: Path | None,
     subject: str = "response",
+    view_transform: Callable[[str], str] | None = None,
 ) -> None:
-    """Based on the given view/output modes, handle user appropriate interactions."""
+    """Based on the given view/output modes, handle user appropriate interactions.
+
+    ``view_transform`` is applied to a string output only for the pager view (e.g. to add
+    ANSI color), so piped/saved output stays untouched.
+    """
     if output is None:
         return
     if view_mode == "pipe":
@@ -185,9 +190,9 @@ def handle_output(
                 check=False,
             )
         else:
-            subprocess.run(
-                "less", input=str(output), shell=True, text=True, check=False
-            )
+            text = view_transform(str(output)) if view_transform else str(output)
+            # ``-R`` passes ANSI color through instead of showing raw escape codes.
+            subprocess.run("less -R", input=text, shell=True, text=True, check=False)
 
     if should_output(
         output,  # pyright: ignore[reportUnknownArgumentType]
