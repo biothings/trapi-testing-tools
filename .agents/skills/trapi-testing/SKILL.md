@@ -51,13 +51,16 @@ payloads go to **stdout**, which is what makes the pipelines below work.
 
 **Run queries** (`tt test`):
 ```bash
-tt test queries/routine -d -e bte.local  # whole routine battery, stop on failures, local bte
-tt test queries/routine/sync/general.py -e retriever.ci
+tt test queries/routine/v1_6 -d -e bte.local  # a version's routine battery, stop on failures, local bte
+tt test queries/routine/v2_0/profiles/lookup -e retriever.ci  # one profile's queries (folder of symlinks)
 tt test queries/my_query.py -e bte.ci -e retriever.ci   # run against multiple environments
 tt test                             # no args → interactively pick query file(s) + environment(s)
 ```
-Pass the `queries/routine` folder (or any folder) to run a whole battery — folders
-expand recursively. `-d/--debug` pauses on
+The routine set is split by TRAPI version (`queries/routine/v1_6/**`,
+`queries/routine/v2_0/**`); under each version, queries live in
+`capabilities/<capability>/` with `profiles/<profile>/` directories of symlinks
+selecting the subset a component type runs. Pass a folder to run a whole battery —
+folders expand recursively (symlinks included). `-d/--debug` pauses on
 failing queries to view/save (and, when piping, keeps responses only for
 failures). `-e` sets the environment(s) — repeatable (interactive picker is
 multiselect); with multiple, each query runs against each sequentially (see
@@ -72,7 +75,9 @@ tt analyze PathCount -f response.json -- --start NCBIGene:3778 --end MONDO:00004
 tt analyze PathCount -- --help                    # help for a parametrized analysis
 ```
 Args after a literal `--` are forwarded to a parametrized analysis. When piping
-input you **must** name analyses (interactive selection needs `-f`).
+input you **must** name analyses (interactive selection needs `-f`). Analyses are
+split by TRAPI version (`analysis/v1_6/`, `analysis/v2_0/`); `--trapi <ver>`
+(default `1.6`) scopes discovery and the parse version.
 
 **Pipe between commands** (`-p/--pipe` emits JSON to stdout):
 ```bash
@@ -94,6 +99,7 @@ tt pk <PK> --raw/-r           # after picking a child, skip TRAPI extraction; em
 tt ping [app] [--all]         # check service instances are responsive
 tt curl <query> -e <env>      # print the query as a curl command
 tt diff <LEFT> [RIGHT]        # TRAPI-aware, order-insensitive diff of two responses (RIGHT via stdin); TRAPI 1.6/2.0, auto-detected from schema_version or forced with --trapi-version
+tt tunnel [start|stop]        # status/prewarm/stop the shared cloudflared callback daemon used for remote async callbacks
 ```
 Output flags shared across commands: `-v/--view` / `-V/--no-view` (view opens
 `CONFIG.viewer`, default `fx`), `-s/--save <path>` / `-S/--no-save`, `-p/--pipe`
@@ -120,12 +126,17 @@ you type most.
 
 ## Authoring a query
 
-Drop a `.py` file under `queries/`. Put it under `queries/routine/**` to include
-it in the `tt test queries/routine` battery. Note `.gitignore` tracks only `queries/routine` and
-`queries/additional` — files elsewhere under `queries/` are local-only.
+Drop a `.py` file under `queries/`. Put it under the version subdir of the
+routine set (`queries/routine/v1_6/capabilities/<capability>/` or the `v2_0`
+equivalent) to include it in that version's battery. A module-level
+`trapi_version` global (`"1.6"` default, or `"2.0"`) selects which TOM model
+namespace its tests parse/validate against — set `"2.0"` for 2.0-shaped bodies
+(top-level `parameters`, QEdge `constraints`, COLLATE, …). Note `.gitignore`
+tracks only `queries/routine` and `queries/additional` — files elsewhere under
+`queries/` are local-only.
 
 **Single request** — module-level globals (`method` defaults to `GET`;
-`endpoint` is required; `params`/`headers`/`body`/`tests` optional):
+`endpoint` is required; `params`/`headers`/`body`/`tests`/`trapi_version` optional):
 ```python
 from tests.battery import standard_battery
 
@@ -151,8 +162,13 @@ steps = [
 ]
 ```
 `body` may be a dict/list or a `translator_tom` (TOM) model — both are
-serialized automatically. Endpoints containing `asyncquery` are auto-polled to
-completion.
+serialized automatically. Endpoints containing `asyncquery` are run to
+completion automatically: by default TTT **receives the callback** (a local
+receiver for loopback/private targets, a shared cloudflared tunnel for remote
+ones), falling back to **polling** when cloudflared is unavailable or the body
+sets its own `callback`. `CONFIG.callback.mode` (`auto`/`direct`/`tunnel`/`poll`)
+picks the strategy, overridable per run with `--callback-mode`/`--cb`; manage the
+shared tunnel daemon with `tt tunnel`.
 
 **Follow-up steps (thread data between requests)** — when a step depends on an
 earlier step's response (async submit → poll, create → read, capture a returned
@@ -196,9 +212,10 @@ and reconstructs a full query body.
 
 ## Authoring an analysis
 
-Drop a `.py` file under `analysis/`. The **class docstring is the display name**
-(trailing period stripped). One file may declare several analyses that share
-helpers (see `analysis/path.py`).
+Drop a `.py` file under `analysis/` — in the version subdir it targets
+(`analysis/v1_6/` or `analysis/v2_0/`; `base_analysis.py` is shared). The **class
+docstring is the display name** (trailing period stripped). One file may declare
+several analyses that share helpers (see `analysis/v1_6/path.py`).
 
 **Argument-free** — subclass `Analysis`:
 ```python
