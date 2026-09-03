@@ -35,7 +35,8 @@ Before committing code changes, run `uv run task fixup` (lint:fix + format:fix +
 - **Query** — a Python module describing an HTTP request (or a `steps` list of
   requests) to send to a service. Run by `tt test`.
 - **Analysis** — transforms a parsed TRAPI response into JSON output. Run by
-  `tt analyze`. Not pass/fail.
+  `tt analyze` (which also prints a metadata/metrics summary + the standard
+  battery). Analyses themselves are not pass/fail.
 - **Test** — a `Test` subclass that inspects a response and returns a
   pass/fail `TestResult` (with optional info). Attached to queries and run
   alongside them. Tests do many kinds of checks, not only validation.
@@ -68,22 +69,29 @@ failures). `-e` sets the environment(s) — repeatable (interactive picker is
 multiselect); with multiple, each query runs against each sequentially (see
 below). `tt test` exits non-zero if any query or test fails.
 
-**Run analyses** (`tt analyze`) — input from `-f file` or piped stdin:
+**Inspect & analyze a response** (`tt analyze`) — summarizes a captured response
+(metadata, metrics, standard battery minus HTTP status), then optionally runs
+analyses. Input is a positional FILE, piped stdin, or (interactive TTY) a picker
+from `responses/`. **Exits non-zero if any battery check fails.**
 ```bash
-tt analyze -f response.json                       # interactively pick analyses
-tt analyze -f response.json NodeFrequency         # named analyses
-tt analyze --list                                 # list available analyses
-tt analyze PathCount -f response.json -- --start NCBIGene:3778 --end MONDO:0000437
-tt analyze PathCount -- --help                    # help for a parametrized analysis
+tt analyze response.json                          # summary + battery, then pick analyses (interactive)
+tt analyze response.json -A                        # quick metrics only — skip analyses
+tt analyze response.json -a NodeFrequency -a PathCount   # named analyses (repeat -a)
+tt analyze --list                                  # list available analyses
+tt analyze response.json -a PathCount -- --start NCBIGene:3778 --end MONDO:0000437
+tt analyze -a PathCount -- --help                  # help for a parametrized analysis
 ```
-Args after a literal `--` are forwarded to a parametrized analysis. When piping
-input you **must** name analyses (interactive selection needs `-f`). Analyses are
-split by TRAPI version (`analysis/v1_6/`, `analysis/v2_0/`); `--trapi <ver>`
-(default `1.6`) scopes discovery and the parse version.
+Args after a literal `--` are forwarded to a parametrized analysis (`-A` and `-a`
+are mutually exclusive). `-a` selects analyses non-interactively; without it a TTY
+prompts to pick, and non-interactive runs skip them. `--pipe/-p` emits **one JSON
+envelope** (metadata + battery + `analyses` keyed by name) to stdout; analysis
+output can also be saved (`-s`/`-S`). TRAPI version auto-detects from the response's
+`schema_version` (`--trapi-version` overrides); analyses are split by version
+(`analysis/v1_6/`, `analysis/v2_0/`).
 
 **Pipe between commands** (`-p/--pipe` emits JSON to stdout):
 ```bash
-tt test queries/my_query.py -e retriever.ci -p plain | tt analyze NodeFrequency -p | jq
+tt test queries/my_query.py -e retriever.ci -p plain | tt analyze -a NodeFrequency -p | jq
 ```
 For `tt test`, `--pipe/-p` requires a mode: `-p plain` pipes just the **response body**
 (a lone body bare, so it chains into `tt analyze`; several as a JSON array); `-p report`

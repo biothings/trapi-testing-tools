@@ -6,8 +6,6 @@ from types import ModuleType
 from typing import Any, Literal, cast
 
 import httpx
-from rich import box
-from rich.panel import Panel
 from rich.text import Text
 
 import trapi_testing_tools
@@ -58,6 +56,7 @@ from trapi_testing_tools.utils import (
     inject_default_submitter,
     maybe_print_traceback,
     parse_query,
+    render_test_result,
     serialize_body,
 )
 
@@ -715,37 +714,11 @@ def run_tests(
                 test.__doc__.removesuffix(".") if test.__doc__ else test.__name__
             )
 
-            message = ""
             if result.passed:
-                message += "[green]✓[/]"
                 passed += 1
             else:
-                message += "[red]x[/]"
                 failed += 1
-            message += f" {i + 1}. {test_name}"
-
-            report_long: Panel | None = None
-            if result.info:
-                if isinstance(result.info, str) and "\n" not in result.info:
-                    message += f" ({result.info})"
-                else:
-                    details = (
-                        result.info
-                        if isinstance(result.info, str)
-                        else "\n".join(result.info)
-                    )
-                    report_long = Panel(
-                        Text(details),
-                        title="details",
-                        title_align="left",
-                        expand=False,
-                        box=box.SQUARE,
-                        border_style="red",
-                    )
-
-            console.print(message)
-            if report_long:
-                console.print(report_long)
+            render_test_result(console, i + 1, test_name, result.passed, result.info)
 
             outcomes.append(
                 {"name": test_name, "passed": result.passed, "info": result.info}

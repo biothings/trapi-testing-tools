@@ -1,58 +1,193 @@
+import json
 import sys
+from contextlib import redirect_stdout
 from pathlib import Path
-from typing import Annotated
+from sys import stderr
+from typing import Annotated, Any
 
 import typer
+from InquirerPy.prompts.confirm import ConfirmPrompt
+from InquirerPy.prompts.fuzzy import FuzzyPrompt
 from rich.console import Console
 
-from analysis.base_analysis import ParametrizedAnalysis
-from trapi_testing_tools.analyze import load_response, run_analyses
+from analysis.base_analysis import AnalysisClass, ParametrizedAnalysis
+from trapi_testing_tools.analyze import (
+    collect_info,
+    detect_response_version,
+    parse_response,
+    read_response_bytes,
+    render_summary,
+    render_verdict,
+    run_analyses_inline,
+    run_info_battery,
+)
 from trapi_testing_tools.commands.utils import (
     discover_analyses,
     set_analyses,
     set_output_modes,
 )
-from trapi_testing_tools.trapi_models import use_version
+from trapi_testing_tools.trapi_models import (
+    DEFAULT_TRAPI_VERSION,
+    SUPPORTED_VERSIONS,
+    TrapiVersion,
+    use_version,
+)
+from trapi_testing_tools.utils import handle_output, is_interactive, serialize_body
 
 console = Console(stderr=True)
 stdout_console = Console()
+
+# Dir searched for interactive response selection (mirrors diff's picker).
+RESPONSES_DIR = Path("responses")
+
 app = typer.Typer(
-    no_args_is_help=True,
+    no_args_is_help=False,
     context_settings=dict(help_option_names=["-h", "--help"]),
 )
 
 
+def select_response() -> Path | None:
+    """Interactively pick a response from ``responses/``; None if there's nothing to pick."""
+    if not RESPONSES_DIR.is_dir():
+        return None
+    choices = sorted(
+        str(path.relative_to(RESPONSES_DIR)) for path in RESPONSES_DIR.rglob("*.json")
+    )
+    if not choices:
+        return None
+    with redirect_stdout(stderr):
+        pick = FuzzyPrompt(
+            message="Select a response...",
+            choices=choices,
+            instruction="(Type to filter, Enter to confirm)",
+            border=True,
+        ).execute()
+    return RESPONSES_DIR / pick if pick else None
+
+
+def resolve_version(flag: str | None, data: bytes) -> TrapiVersion:
+    """The TRAPI version: explicit flag, else the response's schema_version, else default."""
+    if flag is not None:
+        if flag not in SUPPORTED_VERSIONS:
+            console.print(
+                f"ERROR: unsupported --trapi-version {flag!r} "
+                f"(choose from {', '.join(SUPPORTED_VERSIONS)}).",
+                style="red",
+            )
+            raise typer.Exit(1)
+        return flag
+    return detect_response_version(data) or DEFAULT_TRAPI_VERSION
+
+
+def _list_analyses(version: str) -> None:
+    """Print available analyses (name + description) to stdout and exit."""
+    available = discover_analyses(version)
+    if not available:
+        stdout_console.print("No analyses discovered.")
+        raise typer.Exit()
+    width = max(len(name) for name in available)
+    for name in sorted(available):
+        desc = (available[name].__doc__ or "").strip().removesuffix(".")
+        stdout_console.print(f"[bold cyan]{name:<{width}}[/]  {desc}", highlight=False)
+    raise typer.Exit()
+
+
+def _show_analysis_help(names: list[str], forwarded_args: list[str], version: str) -> None:
+    """Show a named analysis' own argument help without reading a response, then exit."""
+    for cls in set_analyses(names, version)[0]:
+        if issubclass(cls, ParametrizedAnalysis):
+            cls.app(
+                args=forwarded_args,
+                prog_name=f"tt analyze {cls.__name__}",
+                standalone_mode=False,
+            )
+        else:
+            console.print(f"{cls.__name__} takes no arguments.")
+    raise typer.Exit()
+
+
+def _build_envelope(  # noqa: PLR0913
+    model: Any,
+    info_data: dict[str, Any],
+    battery: list[dict[str, Any]],
+    source: str,
+    names: list[str] | None,
+    version: TrapiVersion,
+    forwarded_args: list[str],
+) -> dict[str, Any]:
+    """The single JSON envelope for `--pipe`: metadata + battery + any named analyses."""
+    selected = set_analyses(names, version)[0] if names else []
+    analyses_out = dict[str, Any]()
+    for cls in selected:
+        try:
+            if issubclass(cls, ParametrizedAnalysis):
+                output = cls.run(model, forwarded_args)
+            else:
+                output = cls.analyze(model)
+        except Exception as error:
+            analyses_out[cls.__name__] = {"error": repr(error)}
+            continue
+        analyses_out[cls.__name__] = serialize_body(output)
+    return {
+        "source": source,
+        **info_data,
+        "battery": battery,
+        "analyses": analyses_out,
+    }
+
+
+def _select_analyses(names: list[str] | None, version: TrapiVersion) -> list[AnalysisClass]:
+    """Resolve analyses to run after the summary: named, else an interactive confirm+picker."""
+    if names:
+        return set_analyses(names, version)[0]
+    if is_interactive():
+        with redirect_stdout(stderr):
+            run_them = ConfirmPrompt(
+                "Run analyses on this response?", default=False
+            ).execute()
+        if run_them:
+            return set_analyses(None, version)[0]
+    return []
+
+
 @app.command(
     "analyze | a",
-    help="Run one or more analyses on a TRAPI response.",
+    help="Summarize a TRAPI response: metadata, metrics, standard battery, then analyses.",
     context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
 )
 def analyze(  # noqa: PLR0913
-    analyses: Annotated[
+    file: Annotated[
+        Path | None,
+        typer.Argument(
+            # No exists= validator: a `-- --help` tail binds here and must reach the passthrough.
+            help="TRAPI response file (reads stdin if omitted; picked from responses/ when interactive).",
+        ),
+    ] = None,
+    analysis: Annotated[
         list[str] | None,
-        typer.Argument(help="One or more analyses to run."),
+        typer.Option(
+            "--analysis",
+            "-a",
+            help="Analyses to run non-interactively (repeatable). Args after `--` are forwarded.",
+        ),
     ] = None,
     list_analyses: Annotated[
         bool,
         typer.Option("--list", "-l", help="List available analyses and exit."),
     ] = False,
-    trapi_version: Annotated[
-        str,
+    no_analysis: Annotated[
+        bool,
         typer.Option(
-            "--trapi",
-            "-T",
-            help="TRAPI version to parse the response and select analyses for (1.6 or 2.0).",
+            "--no-analysis",
+            "-A",
+            help="Skip analyses entirely; just show metadata, metrics, and the battery.",
         ),
-    ] = "1.6",
-    file: Annotated[
-        Path | None,
+    ] = False,
+    trapi_version: Annotated[
+        str | None,
         typer.Option(
-            "--file",
-            "-f",
-            help="Read the response from a file (instead of stdin).",
-            exists=True,
-            dir_okay=False,
-            readable=True,
+            "--trapi-version",
+            help="TRAPI version to parse as (default: the response's schema_version, else 1.6).",
         ),
     ] = None,
     view: Annotated[
@@ -60,7 +195,7 @@ def analyze(  # noqa: PLR0913
         typer.Option(
             "--view/--no-view",
             "-v/-V",
-            help="View analysis output after each analysis completes.",
+            help="View analysis output (and offer to view the response body).",
             show_default="Prompt",
         ),
     ] = None,
@@ -69,13 +204,13 @@ def analyze(  # noqa: PLR0913
         typer.Option(
             "--save",
             "-s",
-            help="Write analysis output to path. Will prefix with analysis name for multiple files.",
+            help="Write analysis output to path (prefixed with analysis name for multiple).",
         ),
     ] = None,
     no_save: Annotated[
         bool,
         typer.Option(
-            "--no-save", "-S", help="Don't save output and skip prompts to do so."
+            "--no-save", "-S", help="Don't save analysis output and skip prompts to do so."
         ),
     ] = False,
     pipe: Annotated[
@@ -83,68 +218,70 @@ def analyze(  # noqa: PLR0913
         typer.Option(
             "--pipe",
             "-p",
-            help="Instead of viewing, output directly to stdout for piping.",
+            help="Emit one JSON envelope (metadata + battery + analyses) to stdout.",
         ),
     ] = False,
 ) -> None:
-    """Run one or more analyses on a TRAPI response (from a file or piped stdin).
+    """Summarize a captured TRAPI response (from a file or piped stdin), then run analyses.
 
-    Arguments after a `--` separator are forwarded to any parametrized analysis
-    (e.g. `tt analyze PathCount -- --start <CURIE> --end <CURIE>`).
+    Prints metadata and metrics plus the standard test battery (minus HTTP status), runs
+    any analyses (viewing/saving their output), then offers to view the response body
+    (never saved). Exits nonzero if any battery check fails. Arguments after a `--`
+    separator are forwarded to a parametrized analysis
+    (e.g. `tt analyze r.json -a PathCount -- --start <C> --end <C>`).
     """
-    if trapi_version not in ("1.6", "2.0"):
-        console.print(
-            f"--trapi must be '1.6' or '2.0', got {trapi_version!r}", style="red"
-        )
+    if analysis and no_analysis:
+        console.print("ERROR: --analysis/-a and --no-analysis/-A are mutually exclusive.", style="red")
         raise typer.Exit(1)
 
     if list_analyses:
-        available = discover_analyses(trapi_version)
-        if not available:
-            stdout_console.print("No analyses discovered.")
-            raise typer.Exit()
-        width = max(len(name) for name in available)
-        for name in sorted(available):
-            desc = (available[name].__doc__ or "").strip().removesuffix(".")
-            stdout_console.print(
-                f"[bold cyan]{name:<{width}}[/]  {desc}", highlight=False
-            )
-        raise typer.Exit()
+        _list_analyses(trapi_version or DEFAULT_TRAPI_VERSION)
 
     # Everything after a literal `--` is forwarded verbatim to parametrized analyses.
     forwarded_args = list[str]()
     if "--" in sys.argv:
         forwarded_args = sys.argv[sys.argv.index("--") + 1 :]
 
-    # The `analyses` positional also swallowed the forwarded tail; strip it back off.
-    names = list(analyses or [])
-    if forwarded_args:
-        names = names[: len(names) - len(forwarded_args)]
+    # click binds the first post-`--` token to `file`; undo so piped/picker input still works.
+    if forwarded_args and file is not None and str(file) == forwarded_args[0]:
+        file = None
 
-    # Don't want interactive on pipe for complexity reasons
-    if file is None and not names:
-        console.print(
-            "Interactive analysis selection not supported when piping input.",
-            style="red",
+    if analysis and any(arg in ("--help", "-h") for arg in forwarded_args):
+        _show_analysis_help(analysis, forwarded_args, trapi_version or DEFAULT_TRAPI_VERSION)
+
+    if file is None and is_interactive():
+        file = select_response()
+    data, source = read_response_bytes(file)
+    version = resolve_version(trapi_version, data)
+
+    with use_version(version):
+        model = parse_response(data, source, version)
+        info_data = collect_info(model, version, data)
+        battery = run_info_battery(model, version)
+        battery_failed = any(not item["passed"] for item in battery)
+
+        if pipe:
+            names = None if no_analysis else analysis
+            envelope = _build_envelope(
+                model, info_data, battery, source, names, version, forwarded_args
+            )
+            print(json.dumps(envelope))
+            raise typer.Exit(1 if battery_failed else 0)
+
+        render_summary(console, info_data, battery, source)
+
+        # Select analyses only after the summary is on screen, so it informs the choice.
+        selected: list[AnalysisClass] = (
+            [] if no_analysis else _select_analyses(analysis, version)
         )
-        raise typer.Exit(1)
+        output_modes = set_output_modes(view, save, no_save, False, selected)
+        run_analyses_inline(console, model, selected, forwarded_args, output_modes, save)
 
-    selected, _ = set_analyses(names or None, trapi_version)
+        view_mode, _ = output_modes
+        handle_output(
+            serialize_body(model), view_mode, "skip", None, subject="response"
+        )
 
-    # Shortcut to show inner layer help without response checking
-    if any(arg in ("--help", "-h") for arg in forwarded_args):
-        for analysis in selected:
-            if issubclass(analysis, ParametrizedAnalysis):
-                analysis.app(
-                    args=forwarded_args,
-                    prog_name=f"tt analyze {analysis.__name__}",
-                    standalone_mode=False,
-                )
-            else:
-                console.print(f"{analysis.__name__} takes no arguments.")
-        raise typer.Exit()
-
-    output_modes = set_output_modes(view, save, no_save, pipe, selected)
-    with use_version(trapi_version):
-        response = load_response(file)
-        run_analyses(response, selected, forwarded_args, output_modes, save)
+        render_verdict(console, battery)
+        if battery_failed:
+            raise typer.Exit(1)

@@ -113,27 +113,40 @@ class HasPrimaryKnowledgeSource(Test):
         # Spec: every Edge reports one and only one primary_knowledge_source.
         violations = []
         for edge_id, edge in edges.items():
-            primaries = sum(
-                source.resource_role == "primary_knowledge_source"
-                for source in edge.sources
-            )
+            primaries = len(edge_primary_sources(edge))
             if primaries != 1:
                 violations.append(f"{edge_id}: {primaries} primary_knowledge_source(s)")
         return TestResult(len(violations) == 0, violations or None)
 
 
-def _edge_has_klat(edge: Any) -> bool:
-    """Whether an edge carries knowledge_level and agent_type, across TRAPI versions.
+def edge_klat(edge: Any) -> tuple[str | None, str | None]:
+    """An edge's (knowledge_level, agent_type), across TRAPI versions.
 
-    TRAPI 2.0 lifts KL/AT to required top-level Edge fields; 1.6 carries them as
+    TRAPI 2.0 lifts KL/AT to top-level Edge fields; 1.6 carries them as
     `biolink:knowledge_level` / `biolink:agent_type` entries in `attributes`.
     """
-    if getattr(edge, "knowledge_level", None) is not None:  # 2.0: top-level
-        return getattr(edge, "agent_type", None) is not None
-    required = {"biolink:knowledge_level", "biolink:agent_type"}
-    return required.issubset(
-        {attr.attribute_type_id for attr in (edge.attributes or [])}
-    )
+    kl = getattr(edge, "knowledge_level", None)
+    at = getattr(edge, "agent_type", None)
+    if kl is not None or at is not None:
+        return kl, at
+
+    by_type = {attr.attribute_type_id: attr.value for attr in (edge.attributes or [])}
+    return by_type.get("biolink:knowledge_level"), by_type.get("biolink:agent_type")
+
+
+def edge_primary_sources(edge: Any) -> list[str]:
+    """The resource ids of an edge's primary_knowledge_source retrieval sources."""
+    return [
+        source.resource_id
+        for source in edge.sources
+        if source.resource_role == "primary_knowledge_source"
+    ]
+
+
+def _edge_has_klat(edge: Any) -> bool:
+    """Whether an edge carries both knowledge_level and agent_type, across TRAPI versions."""
+    kl, at = edge_klat(edge)
+    return kl is not None and at is not None
 
 
 @dataclass

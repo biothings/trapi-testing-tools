@@ -18,7 +18,7 @@ from InquirerPy.prompts.filepath import FilePathPrompt
 from InquirerPy.prompts.fuzzy import FuzzyPrompt
 from natsort import natsorted
 from platformdirs import PlatformDirs
-from rich import progress
+from rich import box, progress
 from rich.console import (
     Console,
     ConsoleOptions,
@@ -141,6 +141,40 @@ def comment_console() -> Iterator[None]:
     finally:
         console.pop_render_hook()
         console.highlighter = highlighter
+
+
+def render_test_result(
+    target: Console,
+    index: int,
+    name: str,
+    passed: bool,
+    info: str | list[str] | None,
+) -> None:
+    """Print a test's ✓/x line to `target`, with a red detail panel on multi-line info.
+
+    Shared by the query runner and `tt analyze`'s battery so both render identically.
+    """
+    mark = "[green]✓[/]" if passed else "[red]x[/]"
+    message = f"{mark} {index}. {name}"
+
+    detail: Panel | None = None
+    if info:
+        if isinstance(info, str) and "\n" not in info:
+            message += f" ({info})"
+        else:
+            body = info if isinstance(info, str) else "\n".join(info)
+            detail = Panel(
+                Text(body),
+                title="details",
+                title_align="left",
+                expand=False,
+                box=box.SQUARE,
+                border_style="red",
+            )
+
+    target.print(message)
+    if detail:
+        target.print(detail)
 
 
 def should_output(

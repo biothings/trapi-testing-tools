@@ -83,27 +83,34 @@ tt pk <your-pk-here>
 
 For more information, see `tt pk --help`
 
-### Analyzing a response
+### Inspecting & analyzing a response
 
-`tt analyze` runs one or more analyses against a TRAPI response. Select a response from
-a file with `-f`, or pipe one in:
+`tt analyze` summarizes a captured TRAPI response — metadata, metrics, and the standard
+test battery, then optionally runs analyses on it. Pass a response
+file positionally, pipe one in, or (in an interactive terminal) pick one from `responses/`.
 
 ```bash
-# interactively pick analyses to run against a saved response
-tt analyze -f response.json
+# metadata + metrics + battery for a saved response, then interactively pick analyses
+tt analyze response.json
 
-# run specific analyses
-tt analyze -f response.json NodeFrequency SupportGraphHierarchy
+# quick metrics only — skip analyses entirely
+tt analyze response.json -A
 
-# pipe the response body into an analysis (-p plain pipes just the body)
-tt test queries/my_query.py -e retriever.ci -p plain | tt analyze NodeFrequency -p | jq
+# run specific analyses (repeat -a)
+tt analyze response.json -a NodeFrequency -a SupportGraphHierarchy
+
+# pipe a response in; -p emits one JSON envelope (metadata + battery + analyses) to stdout
+tt test queries/my_query.py -e retriever.ci -p plain | tt analyze -a NodeFrequency -p | jq
+
+# list available analyses
+tt analyze --list
 ```
 
-Some analyses take arguments, passed after a `--` separator. You can view analysis
-options with `-- --help`.
+Some analyses take arguments, passed after a `--` separator; view an analysis' options
+with `-a <name> -- --help`.
 
 ```bash
-tt analyze PathCount -f response.json -- --start NCBIGene:3778 --end MONDO:0000437
+tt analyze response.json -a PathCount -- --start NCBIGene:3778 --end MONDO:0000437
 ```
 
 ### Diffing two responses
