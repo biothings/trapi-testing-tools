@@ -68,8 +68,8 @@ CLIENT = httpx.Client(
 _MAX_STATUS_NOT_FOUND = 3
 
 
-def run_queries(  # noqa: PLR0913, PLR0912
-    files: list[Path],
+def run_queries(  # noqa: PLR0913, PLR0912, PLR0915
+    files: list[Path | ModuleType],
     targets: list[tuple[str, str]],
     output_modes: OutputModes,
     save_path: Path | None = None,
@@ -104,38 +104,45 @@ def run_queries(  # noqa: PLR0913, PLR0912
     multiple = len(files) > 1 or len(targets) > 1
     with callback_session(callback_mode) as session:
         for path in files:
-            file = path.resolve().relative_to(
-                Path(trapi_testing_tools.__path__[0]).parent
-            )
-            if file.suffix != ".py":
-                console.print(
-                    f"INFO: skipping {file} as it is not a python file",
-                    style="italic bright_black",
-                )
-                continue
-            if not file.exists():
-                console.print(f"ERROR: {file} does not exist. Skipping...", style="red")
-                all_passed = False
-                if collect:
-                    report_queries.extend(
-                        pre_run_failure(file, env, "file does not exist")
-                        for env, _url in targets
+            package_root = Path(trapi_testing_tools.__path__[0]).parent
+            # A pre-built module (e.g. `tt query`) skips the file discovery/import steps.
+            if isinstance(path, ModuleType):
+                query = path
+                file = Path(cast(str, path.__file__)).resolve().relative_to(package_root)
+            else:
+                file = path.resolve().relative_to(package_root)
+                if file.suffix != ".py":
+                    console.print(
+                        f"INFO: skipping {file} as it is not a python file",
+                        style="italic bright_black",
                     )
-                continue
-            try:
-                import_path = ".".join(file.with_suffix("").parts)
-                query = importlib.import_module(import_path)
-            except Exception as error:
-                console.print(
-                    f"ERROR: failed to read query file due to {error!r}. The query will be skipped."
-                )
-                maybe_print_traceback()
-                all_passed = False
-                if collect:
-                    report_queries.extend(
-                        pre_run_failure(file, env, repr(error)) for env, _url in targets
+                    continue
+                if not file.exists():
+                    console.print(
+                        f"ERROR: {file} does not exist. Skipping...", style="red"
                     )
-                continue
+                    all_passed = False
+                    if collect:
+                        report_queries.extend(
+                            pre_run_failure(file, env, "file does not exist")
+                            for env, _url in targets
+                        )
+                    continue
+                try:
+                    import_path = ".".join(file.with_suffix("").parts)
+                    query = importlib.import_module(import_path)
+                except Exception as error:
+                    console.print(
+                        f"ERROR: failed to read query file due to {error!r}. The query will be skipped."
+                    )
+                    maybe_print_traceback()
+                    all_passed = False
+                    if collect:
+                        report_queries.extend(
+                            pre_run_failure(file, env, repr(error))
+                            for env, _url in targets
+                        )
+                    continue
 
             qualified = ".".join(file.with_suffix("").parts).removeprefix("queries.")
             for env, url in targets:

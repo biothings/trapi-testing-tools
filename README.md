@@ -60,6 +60,32 @@ tt test queries/routine/feature/creative/drug_treats_disease.py  # Specific file
 tt test queries/routine/feature/creative  # Set of files (recursively) under a folder
 ```
 
+### Running an inline query
+
+`tt query` (alias `q`) builds and runs a single-hop query from flags. It's a thin
+wrapper over `one_hop` that runs through the same pipeline as `tt test`, taking the
+same environment, output, `--pipe`, `--against`, and callback flags. The
+version-appropriate standard battery runs by default (`--no-tests` to skip).
+
+```bash
+# drug -> disease lookup against an environment
+tt query -e retriever.ci --subject-ids MONDO:0005148 --object-category ChemicalEntity --predicate treats
+
+# creative/inferred mode with a qualifier and an extra body field (repeat -q / --param)
+tt query --si MONDO:0005148 --oc ChemicalEntity --pred treats --inferred \
+  -q object_aspect_qualifier=activity --param bypass_cache=true
+
+# send without the battery and pipe the response into tt analyze
+tt query -e retriever.ci --si MONDO:0005148 --oc ChemicalEntity --pred treats --no-tests -p plain | tt analyze
+
+# async endpoint, TRAPI 2.0 body/battery
+tt query -e shepherd.aragorn.ci --si MONDO:0005148 --oc ChemicalEntity --pred treats --async --tv 2.0
+
+# resolve a name to a CURIE inline — a 'nameres:<name>' value is looked up via tt norm (top hit)
+tt query -e retriever.ci --si "nameres:type 2 diabetes" --oc ChemicalEntity --pred treats
+```
+
+
 ### Repeating the last test
 
 `tt test -R` (`--repeat`) re-runs the last test invocation, including queries and
@@ -86,8 +112,8 @@ For more information, see `tt pk --help`
 ### Inspecting & analyzing a response
 
 `tt analyze` summarizes a captured TRAPI response — metadata, metrics, and the standard
-test battery, then optionally runs analyses on it. Pass a response
-file positionally, pipe one in, or (in an interactive terminal) pick one from `responses/`.
+test battery, then optionally runs analyses on it. Pass a response file positionally,
+pipe one in, or (in an interactive terminal) pick one from `responses/`.
 
 ```bash
 # metadata + metrics + battery for a saved response, then interactively pick analyses
@@ -141,10 +167,11 @@ tt diff baseline.json new.json --trapi-version 2.0
 
 ### Normalizing identifiers
 
-`tt norm` is a quick lookup against Translator's identifier services. By default it resolves
-names to CURIEs (Name Resolver); `-i`/`--id` switches to CURIE normalization (Node
-Normalizer). Both run against a chosen maturity with `-e` (default `test`); results print
-as a table, and `-r`/`--raw` emits the raw service JSON to stdout for piping.
+`tt norm` is a quick lookup against Translator's identifier services. By default it
+resolves names to CURIEs (Name Resolver); `-i`/`--id` switches to CURIE normalization
+(Node Normalizer). Both run against a chosen maturity with `-e` (default `test`);
+results print as a table, and `-r`/`--raw` emits the raw service JSON to stdout for
+piping.
 
 ```bash
 # name -> CURIEs

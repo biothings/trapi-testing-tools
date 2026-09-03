@@ -3,12 +3,13 @@ name: trapi-testing
 description: >
   Playbook for the trapi-testing-tools CLI (`tt`), used to exercise and analyze
   TRAPI services in the NCATS Translator ecosystem and to extend the tooling.
-  Use when running query files (`tt test`), running analyses (`tt analyze`),
-  retrieving ARS responses by PK (`tt pk`), checking service health (`tt ping`),
-  resolving names/normalizing CURIEs (`tt norm`), emitting curl (`tt curl`), or
-  authoring new query files, analyses, or response tests. Triggers on: TRAPI,
-  `tt`, trapi-tools, query file, analysis, ARS PK, routine tests, Translator
-  service, name resolution, node normalization, CURIE lookup.
+  Use when running query files (`tt test`), running an inline one-hop query
+  (`tt query`), running analyses (`tt analyze`), retrieving ARS responses by PK
+  (`tt pk`), checking service health (`tt ping`), resolving names/normalizing
+  CURIEs (`tt norm`), emitting curl (`tt curl`), or authoring new query files,
+  analyses, or response tests. Triggers on: TRAPI, `tt`, trapi-tools, query file,
+  inline query, analysis, ARS PK, routine tests, Translator service, name
+  resolution, node normalization, CURIE lookup.
 license: MIT
 ---
 
@@ -68,6 +69,24 @@ failing queries to view/save (and, when piping, keeps responses only for
 failures). `-e` sets the environment(s) — repeatable (interactive picker is
 multiselect); with multiple, each query runs against each sequentially (see
 below). `tt test` exits non-zero if any query or test fails.
+
+**Run an inline query** (`tt query`, alias `q`) — build and run a single-hop query
+from flags without authoring a file; a thin wrapper over `one_hop` that runs through
+the same pipeline as `tt test` (same `-e`, `-p`, `--against`, `--cb`, view/save flags
+and verdict UI). The version-appropriate standard battery runs by default.
+```bash
+tt query -e retriever.ci --subject-ids MONDO:0005148 --object-category ChemicalEntity --predicate treats
+tt query -e retriever.ci --si MONDO:0005148 --oc ChemicalEntity --pred treats --inferred -q object_aspect_qualifier=activity
+tt query -e retriever.ci --si MONDO:0005148 --oc ChemicalEntity --pred treats --no-tests -p plain | tt analyze
+```
+Node/edge flags map to `one_hop` args: `--subject-category/--sc`, `--object-category/--oc`,
+`--subject-ids/--si`, `--object-ids/--oi`, `--predicate/--pred`, `--inferred`, repeatable
+`--qualifier/-q type=value`, and repeatable `--param key=value` (extra body-level fields,
+JSON-parsed). `--async` hits `/asyncquery`; `--trapi-version/--tv 2.0` selects the 2.0
+body/battery; `--no-tests` skips the battery. Requires at least one node constraint.
+A `--si`/`--oi` value shaped `nameres:<name>` (e.g. `--si "nameres:type 2 diabetes"`)
+is resolved to its top Name Resolver CURIE (same lookup as `tt norm`) before the query
+runs; literal CURIEs pass through.
 
 **Inspect & analyze a response** (`tt analyze`) — summarizes a captured response
 (metadata, metrics, standard battery minus HTTP status), then optionally runs
@@ -232,7 +251,8 @@ constructors: `one_hop(...)` builds a two-node/one-edge query from
 category/id/predicate args; `from_qg(query_graph, ...)` wraps an existing
 `QueryGraph`/`PathfinderQueryGraph`; and `load_json(path, model)` loads a JSON
 file as a given TOM model (a bare query graph, a `Message`, or a full `Query`)
-and reconstructs a full query body.
+and reconstructs a full query body. `tt query` is the CLI wrapper over `one_hop`
+when you want to fire a single-hop query without writing a file (see above).
 
 ## Authoring an analysis
 

@@ -16,6 +16,7 @@ from trapi_testing_tools.commands.metakg import app as metakg_app
 from trapi_testing_tools.commands.norm import app as norm_app
 from trapi_testing_tools.commands.ping import app as ping_app
 from trapi_testing_tools.commands.pk import app as pk_app
+from trapi_testing_tools.commands.query import app as query_app
 from trapi_testing_tools.commands.test import app as test_app
 from trapi_testing_tools.commands.tunnel import app as tunnel_app
 
@@ -49,6 +50,7 @@ app = typer.Typer(
 )
 
 app.add_typer(test_app)
+app.add_typer(query_app)
 app.add_typer(analyze_app)
 app.add_typer(diff_app)
 app.add_typer(ping_app)
