@@ -36,7 +36,7 @@ def pk(  # noqa:PLR0913
         typer.Option(
             "--save",
             "-s",
-            help="Write response to path.",
+            help="Write response to path (auto-prefixes under --triage).",
         ),
     ] = None,
     no_save: Annotated[
@@ -69,7 +69,7 @@ def pk(  # noqa:PLR0913
             "--triage",
             "-T",
             help="Retrieve every ARA response and show metadata + standard battery "
-            "for each.",
+            "for each; pass -s <path> to also save each response.",
         ),
     ] = False,
     raw: Annotated[
@@ -83,7 +83,7 @@ def pk(  # noqa:PLR0913
 ) -> None:
     """Drill down into ARS PK to get a response of interest."""
     if triage:
-        run_triage(pk)
+        run_triage(pk, save, raw)
         return
 
     view_mode = "prompt"

@@ -388,8 +388,32 @@ def _battery_verdict(passed: int, failed: int) -> str:
     return message
 
 
-def run_triage(pk: str) -> None:
-    """Retrieve every ARA response for a PK and show metadata + battery for each."""
+def _save_triage_response(
+    save_path: Path, agent: str, body: dict[str, Any], *, prefix: bool, raw: bool
+) -> Path:
+    """Write one ARA's triage response to `save_path`, returning the path written.
+
+    Mirrors `tt test`'s multi-save — `save_path` is a file, actor-prefixed
+    (`<ara>_<name>`) when `prefix` — saving the raw ARS body when `raw`, else the payload.
+    """
+    payload = body if raw else extract_response_payload(body)
+
+    path = save_path
+    if prefix:
+        path = path.with_name(f"{agent.removeprefix('ara-')}_{path.name}")
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf8") as file:
+        json.dump(payload, file)
+    return path
+
+
+def run_triage(pk: str, save_path: Path | None = None, raw: bool = False) -> None:
+    """Retrieve every ARA response for a PK and show metadata + battery for each.
+
+    When `save_path` is set, each fetched response is also persisted to it (actor-
+    prefixed when there's more than one; the raw ARS body when `raw`, else the payload).
+    """
     try:
         target_url, trace_body = get_ars_trace(pk)
         if target_url == "":
@@ -406,6 +430,7 @@ def run_triage(pk: str) -> None:
         return
 
     merge_counts = _merge_counts(trace_body)
+    prefix = len(children) > 1
     for agent, body, error in _fetch_all_actor_responses(target_url, children):
         console.rule(
             Text("┌ ", style="rule.line") + agent.removeprefix("ara-"), align="left"
@@ -417,6 +442,9 @@ def run_triage(pk: str) -> None:
         console.push_render_hook(IndentedBlock())
         print_ars_metadata(body, merge_counts.get(agent, 0))
         passed, failed = _run_battery(extract_response_payload(body))
+        if save_path is not None:
+            path = _save_triage_response(save_path, agent, body, prefix=prefix, raw=raw)
+            console.print(Text(f"Saved to {path}", style="rule.line"))
         console.pop_render_hook()
 
         console.print(
