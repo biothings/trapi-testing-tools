@@ -35,6 +35,15 @@ class TestSummary(TypedDict):
     cases: list[TestOutcome]
 
 
+class StepCounts(TypedDict):
+    """Content-shape counts for a step's response — the "did it return results" weigh-in."""
+
+    results: int
+    nodes: int
+    edges: int
+    aux_graphs: int
+
+
 class StepResult(TypedDict):
     """One HTTP request: a query, or one step of a multi-step query, and its tests."""
 
@@ -46,7 +55,9 @@ class StepResult(TypedDict):
     passed: bool  # request ok AND every test passed
     elapsed_seconds: float
     size_bytes: int  # decoded response body size; 0 when there's no response
+    counts: StepCounts | None  # content shape; None when no/unparseable response
     tests: TestSummary
+    saved_path: NotRequired[str]  # where -s wrote this body, when saving under pipe
     response: NotRequired[ResponseBody]  # omittable by a future flag
 
 
@@ -109,16 +120,18 @@ def _response_size(response: httpx.Response | None) -> int:
     return len(response.content) if response is not None else 0
 
 
-def build_step(
+def build_step(  # noqa: PLR0913
     run: StepRun,
     step_passed: bool,
     tests_passed: bool,
     outcomes: list[TestOutcome] | None = None,
     include_response: bool = True,
+    counts: StepCounts | None = None,
 ) -> StepResult:
     """Assemble a `StepResult` from a completed step run and its test outcomes.
 
-    ``include_response`` off omits the response body entirely (report-only mode).
+    ``include_response`` off omits the response body entirely (report-only mode);
+    ``counts`` carries the response's content shape when the caller computed it.
     """
     status = run.status
     if run.response is None and status == "ok":
@@ -132,6 +145,7 @@ def build_step(
         "passed": step_passed,
         "elapsed_seconds": round(run.elapsed, 3),
         "size_bytes": _response_size(run.response),
+        "counts": counts,
         "tests": {"passed": tests_passed, "cases": outcomes or []},
     }
     if include_response:

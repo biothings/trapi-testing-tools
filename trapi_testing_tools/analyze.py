@@ -71,12 +71,26 @@ def load_response(file: Path | None, version: TrapiVersion | None = None) -> Any
     return parse_response(data, source, version)
 
 
+def content_counts(model: Any) -> dict[str, int]:
+    """Result / KG / aux-graph counts — the response's content shape.
+
+    Shared by `collect_info` and the `tt test` pipe envelope so both agree.
+    """
+    message = model.message
+    kg = message.knowledge_graph
+    return {
+        "results": len(message.results or []),
+        "nodes": len(kg.nodes) if kg else 0,
+        "edges": len(kg.edges) if kg else 0,
+        "aux_graphs": len(message.auxiliary_graphs_dict),
+    }
+
+
 def collect_info(model: Any, version: TrapiVersion, raw: bytes) -> dict[str, Any]:
     """Metadata and metrics for a parsed TRAPI response (also the pipe envelope body)."""
     top = json.loads(raw) if raw.strip() else {}
     message = model.message
     kg = message.knowledge_graph
-    nodes = kg.nodes if kg else {}
     edges = kg.edges if kg else {}
     qg = message.query_graph
 
@@ -93,12 +107,7 @@ def collect_info(model: Any, version: TrapiVersion, raw: bytes) -> dict[str, Any
         "trapi_version": version,
         "schema_version": top.get("schema_version"),
         "biolink_version": top.get("biolink_version"),
-        "counts": {
-            "results": len(message.results or []),
-            "nodes": len(nodes),
-            "edges": len(edges),
-            "aux_graphs": len(message.auxiliary_graphs_dict),
-        },
+        "counts": content_counts(model),
         "query_graph": {
             "nodes": len(qg.nodes) if qg else 0,
             "edges": len(getattr(qg, "edges", None) or {}) if qg else 0,

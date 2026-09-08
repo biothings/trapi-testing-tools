@@ -160,7 +160,9 @@ def set_output_modes(  # noqa: PLR0913
             console.print("Pipe mode only supported for a single query/analysis.")
             raise typer.Exit(1)
         view_mode = "pipe"
-        save_mode = "skip"
+        # Keep an explicit -s (save_mode "every") so the body lands on disk; never prompt.
+        if save_mode != "every":
+            save_mode = "skip"
 
     return view_mode, save_mode
 

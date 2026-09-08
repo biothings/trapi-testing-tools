@@ -9,7 +9,10 @@ import httpx
 from rich.text import Text
 
 import trapi_testing_tools
+from tests.base_test import TestResult
+from tests.trapi import parse_or_fail
 from trapi_testing_tools.analyze import (
+    content_counts,
     detect_response_version,
     parse_response,
     read_response_bytes,
@@ -32,6 +35,7 @@ from trapi_testing_tools.fetch import FetchProgress, fetch, live_rows
 from trapi_testing_tools.report import (
     PipeMode,
     QueryResult,
+    StepCounts,
     StepRecord,
     StepResult,
     StepRun,
@@ -249,12 +253,34 @@ def _emit_diff(  # noqa: PLR0913
     render_verdict(deltas)
 
 
+def _step_counts(
+    response: httpx.Response, version: TrapiVersion
+) -> StepCounts | None:
+    """Content-shape counts for a step's response, or None when it isn't valid TRAPI.
+
+    Reuses the battery's memoized parse (same version), so no second full parse.
+    """
+    with use_version(version):
+        model = parse_or_fail(response)
+    if isinstance(model, TestResult):
+        return None
+    return cast(StepCounts, content_counts(model))
+
+
+def _save_response_body(response: httpx.Response, path: Path) -> Path:
+    """Write a response body verbatim to ``path`` (used when saving under pipe)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(response.content)
+    return path
+
+
 @dataclass
 class _RunState:
     """Per-run output config plus state accumulated as each step runs."""
 
     collect: bool
     include_response: bool
+    shape: bool
     steps: list[StepResult] = field(default_factory=list)
     query_passed: bool = True
     total_passed: int = 0
@@ -314,6 +340,7 @@ def _run_step(
         state.query_passed = state.query_passed and step_passed
 
         if state.collect:
+            counts = _step_counts(run.response, query.trapi_version) if state.shape else None
             state.steps.append(
                 build_step(
                     run,
@@ -321,6 +348,7 @@ def _run_step(
                     tests_passed,
                     outcomes,
                     include_response=state.include_response,
+                    counts=counts,
                 )
             )
 
@@ -359,7 +387,11 @@ def manage_query(  # noqa: PLR0913
     console.push_render_hook(IndentedBlock())
 
     queries = parse_query(query_module)
-    state = _RunState(collect, include_response=pipe_mode is not PipeMode.report)
+    state = _RunState(
+        collect,
+        include_response=pipe_mode is not PipeMode.report,
+        shape=collect and pipe_mode is not PipeMode.plain,
+    )
 
     for step in queries:
         bail_reason = _run_step(step, state, url, session)
@@ -387,6 +419,19 @@ def manage_query(  # noqa: PLR0913
         _emit_output(
             state.final_response, output_modes, save_path, on_fail, state.query_passed
         )
+
+    # Under pipe, -s still writes the body to disk; record its handle in the envelope.
+    save_body = (
+        collect
+        and save_path is not None
+        and output_modes[1] == "every"
+        and state.final_response is not None
+        and bool(state.steps)
+        and not (on_fail and state.query_passed)
+    )
+    if save_body:
+        _save_response_body(state.final_response, save_path)
+        state.steps[-1]["saved_path"] = str(save_path)
 
     _print_verdict(
         state.query_passed, state.any_tests, state.total_passed, state.total_failed
