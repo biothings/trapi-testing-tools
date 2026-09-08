@@ -334,11 +334,3 @@ bundles several tests into one that stays silent until a sub-test fails (see
 `standard_battery`'s "integrity checks"). Existing helpers live in `tests/`
 (`http`, `kg`, `logs`, `results`, `metakg`, `params`, plus the TOM helpers in
 `trapi`); reuse them before writing new ones.
-
-## Work in progress — do not rely on
-
-`tt harness` and `tt validate` are incomplete (harness still has TODO markers
-and a debug `print`; validate is a stub). Don't build on them or point users at
-them until they're finished. The `NCATSTranslator/Tests` cache machinery
-(`cache_tests`/`select_tests` in `utils.py`) feeds the unfinished harness and is
-likewise not wired up end-to-end.

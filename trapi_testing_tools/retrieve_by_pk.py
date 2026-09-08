@@ -27,9 +27,12 @@ from trapi_testing_tools.utils import (
     handle_output,
 )
 
-client = httpx.AsyncClient(follow_redirects=True, timeout=300)
-
 ARS_MESSAGES_PATH = "/ars/api/messages"
+
+
+def _new_async_client() -> httpx.AsyncClient:
+    """A fresh ARS async client, opened/closed per fan-out so no loop-bound client leaks."""
+    return httpx.AsyncClient(follow_redirects=True, timeout=300)
 
 
 def _ars_messages_url(base: str) -> str:
@@ -37,8 +40,13 @@ def _ars_messages_url(base: str) -> str:
     return f"{base.rstrip('/')}{ARS_MESSAGES_PATH}"
 
 
+def _agent_name(child: dict[str, Any]) -> str:
+    """Actor agent name for a trace child, or an empty string when absent."""
+    return str((child.get("actor") or {}).get("agent") or "")
+
+
 async def check_ars_pk(
-    lvl: str, pk: str, status: progress.Progress
+    client: httpx.AsyncClient, lvl: str, pk: str, status: progress.Progress
 ) -> dict[str, Any] | None:
     """Check the ars for a given pk, skipping the level if it can't be reached."""
     task = status.add_task(f"Querying ARS {lvl.capitalize()}...", total=1)
@@ -62,12 +70,22 @@ async def check_ars_pk(
         )
         return None
 
+    try:
+        body = response.json()
+    except ValueError:
+        status.update(
+            task,
+            description=f"[yellow]-[/] ARS {lvl.capitalize()} returned a non-JSON body, skipped",
+            completed=1,
+        )
+        return None
+
     status.update(
         task,
         description=f"[green]✓[/] ARS {lvl.capitalize()} has response",
         completed=1,
     )
-    return response.json()
+    return body
 
 
 def get_ars_trace(pk: str) -> tuple[str, dict[str, Any]]:
@@ -78,13 +96,15 @@ def get_ars_trace(pk: str) -> tuple[str, dict[str, Any]]:
         progress.TextColumn("{task.description}"),
         console=console,
     )
-    queries = [check_ars_pk(lvl, pk, task_group) for lvl in levels]
+
+    async def _gather() -> list[dict[str, Any] | None]:
+        async with _new_async_client() as client:
+            return await asyncio.gather(
+                *(check_ars_pk(client, lvl, pk, task_group) for lvl in levels)
+            )
 
     with task_group:
-        loop = asyncio.get_event_loop()
-        responses = dict(
-            zip(levels, loop.run_until_complete(asyncio.gather(*queries)), strict=True)
-        )
+        responses = dict(zip(levels, asyncio.run(_gather()), strict=True))
 
         for lvl, response in responses.items():
             if response is not None:
@@ -102,40 +122,40 @@ def get_ars_ara_response(
     Returns the stored response body along with the selected actor's full agent
     name (e.g. `ara-shepherd-bte`) for cross-referencing the merge history.
     """
-    actor: dict[str, Any]
-    actors = [
-        child["actor"]["agent"].removeprefix("ara-")
-        for child in trace["children"]
-        if "ara" in child["actor"]["agent"]
-    ]
+    children = _ara_children(trace)
+    actors = [_agent_name(child).removeprefix("ara-") for child in children]
 
     if ara in actors:
-        actor = next(
-            child for child in trace["children"] if ara in child["actor"]["agent"]
-        )
         selection = ara
     else:
         if ara is not None:
-            console.print(f"Warning: pre-selected ara '{ara}' not a valid actor")
+            console.print(
+                f"Warning: pre-selected ara '{ara}' not a valid actor", style="yellow"
+            )
         selection = FuzzyPrompt(
             message="Select ARA to retrieve response of:",
-            choices=[actor.removeprefix("ara-") for actor in actors],
+            choices=actors,
             border=True,
             instruction="(Type to filter, Tab to select, Enter to confirm)",
             info=True,
         ).execute()
-        actor = next(
-            child for child in trace["children"] if selection in child["actor"]["agent"]
-        )
 
-    console.print(f"Child key for {selection}: {actor['message']}")
+    actor = next(
+        child
+        for child in children
+        if _agent_name(child).removeprefix("ara-") == selection
+    )
+
+    message_id = actor.get("message")
+    if not message_id:
+        raise ValueError(f"ARA '{selection}' has no stored message in the trace")
 
     response = fetch(
-        SYNC_BASIC_CLIENT, "GET", f"{_ars_messages_url(target_ars)}/{actor['message']}"
+        SYNC_BASIC_CLIENT, "GET", f"{_ars_messages_url(target_ars)}/{message_id}"
     )
     response.raise_for_status()
     console.print(f"Got ARS stored response for {selection}")
-    return response.json(), actor["actor"]["agent"]
+    return response.json(), _agent_name(actor)
 
 
 def _merge_steps(container: dict[str, Any]) -> list[tuple[str, str]]:
@@ -335,18 +355,24 @@ def _ara_children(trace: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 async def _fetch_actor_response(
-    target_url: str, child: dict[str, Any], progress: FetchProgress
+    client: httpx.AsyncClient,
+    target_url: str,
+    child: dict[str, Any],
+    progress: FetchProgress,
 ) -> tuple[str, dict[str, Any] | None, Exception | None]:
     """Stream one actor's stored response into `progress`, returning (agent, body, error)."""
-    agent = str(child["actor"]["agent"])
+    agent = _agent_name(child) or "unknown"
     try:
         response = await stream_into(
-            client, "GET", f"{_ars_messages_url(target_url)}/{child['message']}", progress
+            client,
+            "GET",
+            f"{_ars_messages_url(target_url)}/{child.get('message')}",
+            progress,
         )
         response.raise_for_status()
-    except httpx.HTTPError as error:
+        return agent, response.json(), None
+    except (httpx.HTTPError, ValueError) as error:
         return agent, None, error
-    return agent, response.json(), None
 
 
 def _fetch_all_actor_responses(
@@ -354,17 +380,21 @@ def _fetch_all_actor_responses(
 ) -> list[tuple[str, dict[str, Any] | None, Exception | None]]:
     """Concurrently fetch every actor's stored response, one live progress bar each."""
     rows = [
-        FetchProgress(label=str(child["actor"]["agent"]).removeprefix("ara-"))
+        FetchProgress(label=_agent_name(child).removeprefix("ara-"))
         for child in children
     ]
-    coros = [
-        _fetch_actor_response(target_url, child, row)
-        for child, row in zip(children, rows, strict=True)
-    ]
 
-    loop = asyncio.get_event_loop()
+    async def _gather() -> list[tuple[str, dict[str, Any] | None, Exception | None]]:
+        async with _new_async_client() as client:
+            return await asyncio.gather(
+                *(
+                    _fetch_actor_response(client, target_url, child, row)
+                    for child, row in zip(children, rows, strict=True)
+                )
+            )
+
     with live_rows(rows):
-        return loop.run_until_complete(asyncio.gather(*coros))
+        return asyncio.run(_gather())
 
 
 def _run_battery(payload: dict[str, Any]) -> tuple[int, int]:
@@ -480,14 +510,13 @@ def get_response_from_pk(  # noqa:PLR0913
 
     try:
         body, selected_agent = get_ars_ara_response(target_url, trace_body, ara)
-    except httpx.HTTPError as error:
+    except (httpx.HTTPError, ValueError, StopIteration) as error:
         handle_error("Failed to get ARS stored response for ARA", error)
         return
 
     merge_count = _merge_counts(trace_body).get(selected_agent, 0)
     console.print(
-        Text("┌ ", style="rule.line")
-        + f"ARS Response Metadata · {body.get('pk', '—')}"
+        Text("┌ ", style="rule.line") + f"ARS Response Metadata · {body.get('pk', '—')}"
     )
     console.push_render_hook(IndentedBlock())
     print_ars_metadata(body, merge_count, show_pk=False)

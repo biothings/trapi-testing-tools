@@ -79,8 +79,8 @@ def _file_specs(
 
 @app.command(
     "metakg | m",
-    help="Check whether an environment's /meta_knowledge_graph supports an edge "
-    "(-s/-p/-o/-q/-a) or every edge in one or more query files.",
+    help="Check whether an environment's /meta_knowledge_graph supports a"
+    " flag-defined edge, or every edge in the given query files.",
 )
 def metakg(  # noqa: PLR0913
     queries: Annotated[

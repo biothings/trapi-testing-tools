@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields
-from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Literal
 
 from tests.base_test import Test
@@ -11,14 +10,6 @@ if TYPE_CHECKING:
     from translator_tom import TOMBase
 
     from trapi_testing_tools.report import StepRecord
-
-
-class TestType(StrEnum):
-    """Type of test in the automated testing suite."""
-
-    asset = "asset"
-    case = "case"
-    suite = "suite"
 
 
 HTTPMethod = Literal["GET", "OPTIONS", "HEAD", "POST", "PUT", "PATCH", "DELETE"]

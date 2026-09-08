@@ -265,7 +265,15 @@ def analyze(  # noqa: PLR0913
             envelope = _build_envelope(
                 model, info_data, battery, source, names, version, forwarded_args
             )
-            print(json.dumps(envelope))
+            payload = json.dumps(envelope)
+            print(payload)
+
+            # An explicit -s still lands the envelope on disk (never prompt under pipe).
+            if save is not None and not no_save:
+                save.parent.mkdir(parents=True, exist_ok=True)
+                save.write_text(payload, encoding="utf8")
+                console.print(f"Saved envelope to {save}", style="rule.line")
+
             raise typer.Exit(1 if battery_failed else 0)
 
         render_summary(console, info_data, battery, source)

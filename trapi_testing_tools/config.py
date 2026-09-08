@@ -86,7 +86,6 @@ class TTTConfig(BaseSettings):
     """Basic config for the TRAPI Testing Tools."""
 
     timeout: float = 300
-    test_repo: str = "NCATSTranslator/Tests"
     viewer: str = "fx"
     submitter: str = (
         "trapi-testing-tools"  # auto-injected into TRAPI bodies; "" disables

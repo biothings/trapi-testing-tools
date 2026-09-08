@@ -384,8 +384,6 @@ def manage_query(  # noqa: PLR0913
     console.rule(
         Text("┌ ", style="rule.line") + str(rel_path) + f" · {env}", align="left"
     )
-    console.push_render_hook(IndentedBlock())
-
     queries = parse_query(query_module)
     state = _RunState(
         collect,
@@ -393,26 +391,49 @@ def manage_query(  # noqa: PLR0913
         shape=collect and pipe_mode is not PipeMode.plain,
     )
 
-    for step in queries:
-        bail_reason = _run_step(step, state, url, session)
-        if bail_reason is not None:
+    console.push_render_hook(IndentedBlock())
+    hook_active = True
+    try:
+        # A query with no steps ran nothing — fail it rather than falsely pass/crash later.
+        if not queries:
             console.pop_render_hook()
-            console.print(f"└ {bail_reason}", style="rule.line")
+            hook_active = False
+            console.print(
+                "└ [red]X Failed[/] query defines no steps to run",
+                style="rule.line",
+                markup=True,
+            )
             result = (
                 build_query_result(
-                    rel_path,
-                    env,
-                    state.steps,
-                    False,
-                    state.query_elapsed,
-                    len(queries) > 1,
+                    rel_path, env, state.steps, False, state.query_elapsed, False
                 )
                 if collect
                 else None
             )
-            return False, result, (state.final_response, state.trapi_version)
+            return False, result, (None, None)
 
-    console.pop_render_hook()
+        for step in queries:
+            bail_reason = _run_step(step, state, url, session)
+            if bail_reason is not None:
+                console.pop_render_hook()
+                hook_active = False
+                console.print(f"└ {bail_reason}", style="rule.line")
+                result = (
+                    build_query_result(
+                        rel_path,
+                        env,
+                        state.steps,
+                        False,
+                        state.query_elapsed,
+                        len(queries) > 1,
+                    )
+                    if collect
+                    else None
+                )
+                return False, result, (state.final_response, state.trapi_version)
+    finally:
+        if hook_active:
+            console.pop_render_hook()
 
     # Output (non-pipe only; piping is aggregated into one report by run_queries)
     if not collect:
@@ -672,9 +693,14 @@ def _await_callback_result(
 
 def _await_async_result(
     response: httpx.Response, body: dict[str, Any], url: str, elapsed: float
-) -> tuple[httpx.Response | None, Literal["ok", "timeout"], float]:
+) -> tuple[httpx.Response | None, Literal["ok", "timeout", "error"], float]:
     """Poll asyncquery_status to completion, then fetch the final response."""
-    status_url = url + "/asyncquery_status/" + body["job_id"]
+    job_id = body.get("job_id")
+    if not job_id:
+        console.print("Async submit response has no 'job_id'; cannot poll.", style="red")
+        return response, "error", elapsed
+
+    status_url = url + "/asyncquery_status/" + job_id
 
     response, body, elapsed, uncertainty, timed_out = _poll_async_status(
         status_url, response, body, elapsed
@@ -710,7 +736,7 @@ def _poll_async_status(
     Returns the latest response and body, the accumulated elapsed time and its
     uncertainty, and whether polling timed out.
     """
-    status = body["status"]
+    status = body.get("status")
     uncertainty = 0
     not_found = 0
     with console.status("Polling status endpoint every 10s...") as task_status:
@@ -743,7 +769,7 @@ def _poll_async_status(
                 not_found = 0
             response.raise_for_status()
             body = cast(dict[str, Any], response.json())
-            status = body["status"]
+            status = body.get("status")
 
     return response, body, elapsed, uncertainty, False
 

@@ -28,8 +28,7 @@ class Domain(str, Enum):
 
 @app.command(
     "manifest | man",
-    help="Show the runtime-resolved capability surface (envs, analyses, queries, "
-    "tests, config); rich by default, --raw for JSON.",
+    help="Show a manifest of runtime-resolved capabilities (see domain).",
 )
 def manifest(
     domain: Annotated[
@@ -61,10 +60,6 @@ def manifest(
             help="Emit the full JSON surface to stdout instead of the rich view.",
         ),
     ] = False,
-    compact: Annotated[
-        bool,
-        typer.Option("--compact", "-c", help="Emit compact JSON (with --raw/piping)."),
-    ] = False,
 ) -> None:
     """Show the runtime-resolved capability surface (rich to stderr, JSON on --raw/pipe)."""
     if trapi_version is not None and trapi_version not in ("1.6", "2.0"):
@@ -76,7 +71,14 @@ def manifest(
     result = build_manifest(domain.value, trapi_version)
 
     # Piped stdout has no human to read the rich view, so it gets the JSON surface too.
-    if raw or not sys.stdout.isatty():
-        print(json.dumps(result, indent=None if compact else 2))
+    as_json = raw or not sys.stdout.isatty()
+    if files and as_json:
+        console.print(
+            "Note: --files only affects the rich view; the JSON surface always includes "
+            "per-file detail.",
+            style="yellow",
+        )
+    if as_json:
+        print(json.dumps(result))
     else:
         render_manifest(result, files=files)

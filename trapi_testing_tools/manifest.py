@@ -68,7 +68,6 @@ def collect_config() -> dict[str, Any]:
         "viewer": CONFIG.viewer,
         "submitter": CONFIG.submitter,
         "timeout": CONFIG.timeout,
-        "test_repo": CONFIG.test_repo,
         "callback": CONFIG.callback.model_dump(),
     }
 

@@ -140,7 +140,7 @@ def test(  # noqa: PLR0913
         typer.Option(
             "--debug",
             "-d",
-            help="Only surface failing queries: stop to view/save them, or (when piping) keep only their responses.",
+            help="Only view/save (or keep in report) responses for failing queries.",
         ),
     ] = False,
     view: Annotated[
@@ -174,8 +174,7 @@ def test(  # noqa: PLR0913
             "--pipe",
             "-p",
             help="Pipe JSON to stdout in the given shape: 'plain' (response "
-            "body/bodies, for chaining into tt analyze), 'report' (run/test report, "
-            "no bodies), or 'full' (report with bodies).",
+            "bodies), 'report' (report only), or 'full' (report with bodies).",
         ),
     ] = None,
     repeat: Annotated[
@@ -207,8 +206,6 @@ def test(  # noqa: PLR0913
     ] = None,
 ) -> None:
     """Run one or more queries against one or more environments."""
-    used_interactive = False
-
     if repeat:
         (
             queries,
@@ -231,8 +228,8 @@ def test(  # noqa: PLR0913
             against=against,
         )
 
-    queries, used_interactive = set_queries(queries)
-    environment, used_interactive = set_environment(environment)
+    queries, _ = set_queries(queries)
+    environment, _ = set_environment(environment)
     output_modes = set_output_modes(
         view, save, no_save, pipe is not None, queries, allow_multi=True
     )
@@ -250,31 +247,6 @@ def test(  # noqa: PLR0913
             "against": str(against) if against is not None else None,
         }
     )
-
-    # Output hint to repeat quicker
-    if used_interactive:
-        opts = [f"-e {env}" for env in environment]
-        if debug:
-            opts.append("-d")
-        if view is not None:
-            opts.append("-v" if view else "-V")
-        if save is not None:
-            opts.append(f"-s {save}")
-        if no_save:
-            opts.append("-S")
-        if pipe is not None:
-            opts.append(f"-p {pipe.value}")
-        if callback_mode is not None:
-            opts.append(f"--cb {callback_mode.value}")
-        if against is not None:
-            opts.append(f"--against {against}")
-        console.print(
-            f"\\[Hint] Re-run this command more quickly using: tt test {' '.join(opts)} {' '.join(str(q.relative_to(Path.cwd())) for q in queries)}"
-            " (or just: tt test -R)",
-            style="italic bright_black",
-            soft_wrap=True,
-            highlight=False,
-        )
 
     targets = [(env, ENVIRONMENT_MAPPING[env]) for env in environment]
     passed = run_queries(

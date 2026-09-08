@@ -1,3 +1,4 @@
+import sys
 from contextlib import redirect_stdout
 from pathlib import Path
 from sys import stderr
@@ -196,6 +197,13 @@ def diff(  # noqa: PLR0913
             )
             raise typer.Exit(1)
         left, right = select_responses()
+
+    # RIGHT falls back to stdin; with nothing piped, reading it would block forever.
+    if right is None and sys.stdin.isatty():
+        console.print(
+            "ERROR: provide a RIGHT response file or pipe one to stdin.", style="red"
+        )
+        raise typer.Exit(1)
 
     left_name = str(left)
     right_name = str(right) if right is not None else "<stdin>"

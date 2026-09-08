@@ -1,8 +1,6 @@
 import asyncio
 import json
-import shutil
 import subprocess
-import zipfile
 from collections.abc import Callable, Coroutine, Iterator
 from contextlib import contextmanager, redirect_stdout
 from dataclasses import replace
@@ -15,9 +13,6 @@ from typing import Any, Literal, cast, get_args, override
 import httpx
 from InquirerPy.prompts.confirm import ConfirmPrompt
 from InquirerPy.prompts.filepath import FilePathPrompt
-from InquirerPy.prompts.fuzzy import FuzzyPrompt
-from natsort import natsorted
-from platformdirs import PlatformDirs
 from rich import box, progress
 from rich.console import (
     Console,
@@ -39,7 +34,7 @@ from translator_tom import TOMBase
 from tests.base_test import Test
 from trapi_testing_tools.config import CONFIG
 from trapi_testing_tools.console import console
-from trapi_testing_tools.types import HTTPMethod, Query, TestType
+from trapi_testing_tools.types import HTTPMethod, Query
 
 SYNC_BASIC_CLIENT = httpx.Client(follow_redirects=True, timeout=None)
 ASYNC_BASIC_CLIENT = httpx.AsyncClient(follow_redirects=True, timeout=None)
@@ -357,214 +352,6 @@ def parse_query(query_module: ModuleType) -> list[Query]:
         ]
 
     return [inject_default_submitter(query) for query in queries]
-
-
-def cache_tests() -> None:
-    """Cache repo tests locally."""
-    try:
-        test_repo = CONFIG.test_repo
-
-        # Prep a cache directory
-        dirs = PlatformDirs("trapi-testing-tools", "biothings")
-        cache_dir = dirs.user_cache_path / f"tests/{test_repo.replace('/', '~')}"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        archive_path = cache_dir / "archive"
-        unzip_dir = cache_dir / "repo"
-        local_update_file = cache_dir / "updated_date"
-
-        repo_url = f"https://api.github.com/repos/{test_repo}"
-
-        with console.status("Checking for cache updates...") as status:
-            needs_update = True
-            response = SYNC_BASIC_CLIENT.get(repo_url)
-            response.raise_for_status()
-            body = response.json()
-            remote_update = body["updated_at"]
-            local_update = ""
-            if local_update_file.exists():
-                with local_update_file.open(encoding="utf8") as file:
-                    local_update = file.read()
-                needs_update = local_update != remote_update
-
-            if not needs_update:
-                console.print(
-                    f"{test_repo}: Cache is up-to-date and contains {len([path for path in unzip_dir.rglob('*') if path.is_file()])} files.",
-                    style="italic bright_black",
-                )
-                return
-            else:
-                console.print(
-                    f"{test_repo}: Cache needs update: new update {remote_update} | current update {local_update or 'None'}",
-                    style="italic bright_black",
-                    highlight=False,
-                )
-
-            status.update("Getting repository contents...")
-            with (
-                archive_path.open("wb") as archive_file,
-                SYNC_BASIC_CLIENT.stream(
-                    "GET",
-                    f"{repo_url}/zipball",
-                ) as response,
-            ):
-                for chunk in response.iter_bytes():
-                    archive_file.write(chunk)
-                    status.update(
-                        f"Getting repository contents...({response.num_bytes_downloaded / 1000}kb)"
-                    )
-
-            # Clean up old unzip, then new archive
-            status.update("Extracting repository contents...")
-            shutil.rmtree(unzip_dir, ignore_errors=True)
-            with zipfile.ZipFile(archive_path) as zipped_file:
-                zipped_file.extractall(unzip_dir)
-            archive_path.unlink()
-
-            # Move repo up one
-            status.update("Organizing...")
-            extraneous_dir = next(unzip_dir.glob("*"))
-            for item in extraneous_dir.glob("*"):
-                item.rename(unzip_dir / f"{item.stem}{item.suffix}")
-            shutil.rmtree(extraneous_dir, ignore_errors=True)
-
-            # Now that everything has succeeded, we can set the update date
-            status.update("Writing update date...")
-            if not local_update_file.exists():
-                with local_update_file.open("w", encoding="utf8") as file:
-                    file.write(remote_update)
-
-        console.print(
-            f"Cached {len([path for path in unzip_dir.rglob('*') if path.is_file()])} files from {test_repo}.",
-            style="italic bright_black",
-        )
-    except Exception as error:
-        console.print(
-            f"[red]ERROR:[/]: An error occurred while checking/updating cache: {error!r}"
-        )
-        maybe_print_traceback()
-
-
-def cache_repo_dir() -> Path:
-    """Return the local directory holding the extracted test repo."""
-    dirs = PlatformDirs("trapi-testing-tools", "biothings")
-    return dirs.user_cache_path / f"tests/{CONFIG.test_repo.replace('/', '~')}" / "repo"
-
-
-_TYPE_BY_DIR = {
-    "test_assets": TestType.asset,
-    "test_cases": TestType.case,
-    "test_suites": TestType.suite,
-}
-
-
-def test_type_of_path(path: Path) -> TestType | None:
-    """Infer a test's type from its cache directory (test_assets/cases/suites)."""
-    return _TYPE_BY_DIR.get(path.parent.name)
-
-
-def infer_test_type(path: Path, data: dict[str, Any]) -> TestType:
-    """Infer a test's type from its cache directory, falling back to its shape."""
-    dir_type = test_type_of_path(path)
-    if dir_type is not None:
-        return dir_type
-    if data.get("test_cases"):
-        return TestType.suite
-    if "test_assets" in data:
-        return TestType.case
-    return TestType.asset
-
-
-def cached_test_files(test_type: TestType) -> list[Path]:
-    """Return the cached test JSON files for a given test type."""
-    return sorted((cache_repo_dir() / f"test_{test_type}s").glob("*.json"))
-
-
-def load_cached_tests(test_type: TestType) -> list[tuple[Path, dict[str, Any]]]:
-    """Load all cached test files for a given test type (skipping unreadable ones)."""
-    loaded = list[tuple[Path, dict[str, Any]]]()
-    for path in cached_test_files(test_type):
-        try:
-            with path.open(encoding="utf8") as file:
-                loaded.append((path, json.load(file)))
-        except (OSError, json.JSONDecodeError):
-            continue
-    return loaded
-
-
-def case_input_name(case: dict[str, Any]) -> str | None:
-    """Human-readable name for a case's input CURIE, taken from its assets.
-
-    Case metadata only stores ``test_case_input_id`` (a bare CURIE), but the
-    matching asset carries the ``input_name`` (e.g. ``Aceruloplasminemia`` for
-    ``MONDO:0011426``).
-    """
-    assets = case.get("test_assets") or []
-    tcid = case.get("test_case_input_id")
-    for asset in assets:
-        if asset.get("input_id") == tcid and asset.get("input_name"):
-            return str(asset["input_name"])
-    for asset in assets:  # fall back to any asset's input name
-        if asset.get("input_name"):
-            return str(asset["input_name"])
-    return None
-
-
-def case_display_name(case: dict[str, Any]) -> str:
-    """Case name enriched with its input's human name.
-
-    e.g. ``what treats MONDO:0011426`` -> ``what treats MONDO:0011426
-    (Aceruloplasminemia)``.
-    """
-    name = case.get("name") or case.get("description") or "<No Name>"
-    human = case_input_name(case)
-    if human and human.lower() not in name.lower():
-        name = f"{name} ({human})"
-    return name
-
-
-def test_label(path: Path, test: dict[str, Any], test_type: TestType) -> str:
-    """Build an enriched, filterable label for a test in the fuzzy picker.
-
-    The label is keyed on the file **stem** (which is the unique, resolvable id —
-    suite files share generic internal ids like ``TestSuite_1``). Assets append
-    their input/output CURIEs (the predicate and expected output are already in the
-    test name); cases and suites show a child count.
-    """
-    stem = path.stem
-    if test_type == TestType.suite:
-        name = test.get("name") or test.get("description") or "<No Name>"
-        cases = test.get("test_cases")
-        if cases:
-            return f"{stem}: {name}  ({len(cases)} cases)"
-        return f"{stem}: {name}  ({len(test.get('test_assets') or [])} assets)"
-    if test_type == TestType.case:
-        name = case_display_name(test)
-        return f"{stem}: {name}  ({len(test.get('test_assets') or [])} assets)"
-
-    # asset
-    name = test.get("name") or "<No Name>"
-    label = f"{stem}: {name}"
-    if test.get("input_id") and test.get("output_id"):
-        label += f"  {test['input_id']} → {test['output_id']}"
-    return label
-
-
-def select_tests(test_type: TestType) -> list[Path]:
-    """Prompt user to fuzzy-select tests using an enriched, filterable label."""
-    prompt_to_fpath = dict[str, Path]()
-    for path, test in load_cached_tests(test_type):
-        prompt_to_fpath[test_label(path, test, test_type)] = path
-
-    selection = FuzzyPrompt(
-        message=f"Select test {test_type}(s)...",
-        choices=natsorted(prompt_to_fpath),
-        multiselect=True,
-        border=True,
-        instruction="(Type to filter, Tab to select, Enter to confirm)",
-        info=True,
-    ).execute()
-
-    return [prompt_to_fpath[prompt] for prompt in selection]
 
 
 def _health_check_path(app_name: str) -> str:
