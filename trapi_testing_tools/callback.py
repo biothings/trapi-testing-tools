@@ -41,7 +41,10 @@ import httpx
 from platformdirs import PlatformDirs
 
 from trapi_testing_tools.config import CONFIG
+from trapi_testing_tools.fetch import FetchProgress
 from trapi_testing_tools.utils import console
+
+_READ_CHUNK = 65536  # inbound-callback read granularity (progress-bar update cadence)
 
 ResolvedMode = Literal["tunnel", "direct", "poll"]
 
@@ -109,9 +112,10 @@ def _split_route(path: str) -> tuple[str, str]:
             return "", ""
 
 
-def _read_chunked(stream: BufferedIOBase) -> bytes:
-    """Decode a `Transfer-Encoding: chunked` request body."""
+def _read_chunked(stream: BufferedIOBase, progress: FetchProgress | None = None) -> bytes:
+    """Decode a `Transfer-Encoding: chunked` request body, updating `progress` if given."""
     chunks: list[bytes] = []
+    received = 0
     while True:
         size_line = stream.readline().split(b";", 1)[0].strip()
         size = int(size_line, 16)
@@ -120,6 +124,9 @@ def _read_chunked(stream: BufferedIOBase) -> bytes:
             break
         chunks.append(stream.read(size))
         stream.readline()  # CRLF after chunk
+        received += size
+        if progress is not None:
+            progress.downloaded = received  # no total (chunked) → stays a spinner + counter
     return b"".join(chunks)
 
 
@@ -209,6 +216,7 @@ class CallbackReceiver:
         """
         self._payloads: dict[str, tuple[bytes, float]] = {}
         self._events: dict[str, threading.Event] = {}
+        self._progress: dict[str, FetchProgress] = {}
         self._lock = threading.Lock()
         self._last_activity = time.monotonic()
         self._verbose = verbose
@@ -230,11 +238,26 @@ class CallbackReceiver:
             self._events[token] = threading.Event()
         return token
 
-    def wait(self, token: str, timeout: float) -> bytes | None:
-        """Block until the token's callback arrives (or timeout); return its body."""
+    def wait(
+        self, token: str, timeout: float, progress: FetchProgress | None = None
+    ) -> bytes | None:
+        """Block until the token's callback arrives (or timeout); return its body.
+
+        A `progress` (rendered by the caller) is registered so `do_POST` can drive its
+        receiving bar as the callback body streams in.
+        """
         event = self._events.get(token)
-        if event is None or not event.wait(timeout):
+        if event is None:
             return None
+        if progress is not None:
+            with self._lock:
+                self._progress[token] = progress
+        try:
+            if not event.wait(timeout):
+                return None
+        finally:
+            with self._lock:
+                self._progress.pop(token, None)
         with self._lock:
             item = self._payloads.pop(token, None)
             self._events.pop(token, None)
@@ -277,7 +300,7 @@ class CallbackReceiver:
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler API)
                 route, token = _split_route(self.path)
-                body = self._read_body()
+                body = self._read_body(token)
                 if route == "callback" and token:
                     receiver._store(token, body)
                     receiver._log(f"callback received: token={token[:8]}… {len(body)}B")
@@ -305,11 +328,27 @@ class CallbackReceiver:
                 self.end_headers()
                 self.wfile.write(body)
 
-            def _read_body(self) -> bytes:
+            def _read_body(self, token: str) -> bytes:
+                progress = receiver._progress.get(token)
+                if progress is not None:
+                    progress.label = "Receiving callback..."
                 if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
-                    return _read_chunked(self.rfile)
+                    return _read_chunked(self.rfile, progress)
+
                 length = int(self.headers.get("Content-Length") or 0)
-                return self.rfile.read(length) if length else b""
+                if not length:
+                    return b""
+                if progress is not None:
+                    progress.total = length
+                chunks = bytearray()
+                while len(chunks) < length:
+                    chunk = self.rfile.read(min(length - len(chunks), _READ_CHUNK))
+                    if not chunk:
+                        break
+                    chunks.extend(chunk)
+                    if progress is not None:
+                        progress.downloaded = len(chunks)
+                return bytes(chunks)
 
             def log_message(
                 self, *args: object
@@ -587,14 +626,20 @@ class CallbackSession:
         self._token_backend[token] = "direct"
         return token, f"http://{self.host}:{receiver.port}/callback/{token}"
 
-    def wait(self, token: str, timeout: float) -> bytes | None:
-        """Block for the token's callback body (or ``None`` on timeout)."""
+    def wait(
+        self, token: str, timeout: float, progress: FetchProgress | None = None
+    ) -> bytes | None:
+        """Block for the token's callback body (or ``None`` on timeout).
+
+        `progress` drives the direct receiver's receiving bar; the tunnel path ignores it
+        (the daemon receives the body out-of-process), leaving it a spinner.
+        """
         if self._token_backend.get(token) == "tunnel":
             assert self._daemon is not None
             return _await_via_daemon(self._daemon, token, timeout)
         if self._receiver is None:
             return None
-        return self._receiver.wait(token, timeout)
+        return self._receiver.wait(token, timeout, progress)
 
     def close(self) -> None:
         """Tear down the per-run receiver (the session daemon persists across runs)."""

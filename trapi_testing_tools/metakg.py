@@ -19,6 +19,7 @@ from rich.console import Console
 from rich.text import Text
 from translator_tom import Biolink
 
+from trapi_testing_tools.fetch import fetch
 from trapi_testing_tools.trapi_models import TrapiVersion, models
 from trapi_testing_tools.utils import SYNC_BASIC_CLIENT
 
@@ -52,10 +53,12 @@ class Support:
 
 def fetch_metakg(base_url: str) -> httpx.Response:
     """GET the service's `meta_knowledge_graph`, raising on a non-2xx status."""
-    with console.status("Fetching meta_knowledge_graph..."):
-        response = SYNC_BASIC_CLIENT.get(
-            f"{base_url.rstrip('/')}/meta_knowledge_graph", timeout=TIMEOUT
-        )
+    response = fetch(
+        SYNC_BASIC_CLIENT,
+        "GET",
+        f"{base_url.rstrip('/')}/meta_knowledge_graph",
+        timeout=TIMEOUT,
+    )
     response.raise_for_status()
     return response
 

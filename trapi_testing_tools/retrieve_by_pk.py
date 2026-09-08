@@ -18,9 +18,14 @@ from rich.text import Text
 from tests.battery import standard_battery
 from trapi_testing_tools.config import CONFIG
 from trapi_testing_tools.console import console
+from trapi_testing_tools.fetch import FetchProgress, fetch, live_rows, stream_into
 from trapi_testing_tools.run_query import run_tests
 from trapi_testing_tools.types import Query
-from trapi_testing_tools.utils import IndentedBlock, handle_output
+from trapi_testing_tools.utils import (
+    SYNC_BASIC_CLIENT,
+    IndentedBlock,
+    handle_output,
+)
 
 client = httpx.AsyncClient(follow_redirects=True, timeout=300)
 
@@ -36,7 +41,7 @@ async def check_ars_pk(
     lvl: str, pk: str, status: progress.Progress
 ) -> dict[str, Any] | None:
     """Check the ars for a given pk, skipping the level if it can't be reached."""
-    task = status.add_task(f"Querying ARS {lvl.capitalize()}...")
+    task = status.add_task(f"Querying ARS {lvl.capitalize()}...", total=1)
 
     try:
         base = _ars_messages_url(CONFIG.environments["ars"][lvl])
@@ -125,8 +130,9 @@ def get_ars_ara_response(
 
     console.print(f"Child key for {selection}: {actor['message']}")
 
-    with console.status("Querying ARS for TRAPI response..."):
-        response = httpx.get(f"{_ars_messages_url(target_ars)}/{actor['message']}")
+    response = fetch(
+        SYNC_BASIC_CLIENT, "GET", f"{_ars_messages_url(target_ars)}/{actor['message']}"
+    )
     response.raise_for_status()
     console.print(f"Got ARS stored response for {selection}")
     return response.json(), actor["actor"]["agent"]
@@ -329,13 +335,13 @@ def _ara_children(trace: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 async def _fetch_actor_response(
-    target_url: str, child: dict[str, Any]
+    target_url: str, child: dict[str, Any], progress: FetchProgress
 ) -> tuple[str, dict[str, Any] | None, Exception | None]:
-    """Fetch one actor's stored response, returning (agent, body, error)."""
+    """Stream one actor's stored response into `progress`, returning (agent, body, error)."""
     agent = str(child["actor"]["agent"])
     try:
-        response = await client.get(
-            f"{_ars_messages_url(target_url)}/{child['message']}"
+        response = await stream_into(
+            client, "GET", f"{_ars_messages_url(target_url)}/{child['message']}", progress
         )
         response.raise_for_status()
     except httpx.HTTPError as error:
@@ -346,12 +352,19 @@ async def _fetch_actor_response(
 def _fetch_all_actor_responses(
     target_url: str, children: list[dict[str, Any]]
 ) -> list[tuple[str, dict[str, Any] | None, Exception | None]]:
-    """Concurrently fetch every actor's stored response."""
-    with console.status("Retrieving all ARA responses..."):
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(
-            asyncio.gather(*(_fetch_actor_response(target_url, c) for c in children))
-        )
+    """Concurrently fetch every actor's stored response, one live progress bar each."""
+    rows = [
+        FetchProgress(label=str(child["actor"]["agent"]).removeprefix("ara-"))
+        for child in children
+    ]
+    coros = [
+        _fetch_actor_response(target_url, child, row)
+        for child, row in zip(children, rows, strict=True)
+    ]
+
+    loop = asyncio.get_event_loop()
+    with live_rows(rows):
+        return loop.run_until_complete(asyncio.gather(*coros))
 
 
 def _run_battery(payload: dict[str, Any]) -> tuple[int, int]:

@@ -28,6 +28,7 @@ from trapi_testing_tools.diff import (
     render_text_report,
     render_verdict,
 )
+from trapi_testing_tools.fetch import FetchProgress, fetch, live_rows
 from trapi_testing_tools.report import (
     PipeMode,
     QueryResult,
@@ -520,14 +521,14 @@ def run_query(
     console.print(f"{method} {target}")
 
     try:
-        with console.status("Querying..."):
-            response = CLIENT.request(
-                method=method,
-                url=target,
-                params=query.params,
-                headers=query.headers,
-                json=query.body,
-            )
+        response = fetch(
+            CLIENT,
+            method,
+            target,
+            params=query.params,
+            headers=query.headers,
+            json=query.body,
+        )
 
         elapsed = response.elapsed.total_seconds()
         response.raise_for_status()
@@ -606,9 +607,10 @@ def _await_callback_result(
 ) -> tuple[httpx.Response, Literal["ok", "timeout"], float]:
     """Block on the receiver for the service's callback POST, then wrap it."""
     start = time.monotonic()
-    with console.status("Awaiting callback..."):
-        console.print(f"Awaiting callback (up to {CONFIG.timeout} s)...")
-        raw = session.wait(token, CONFIG.timeout)
+    console.print(f"Awaiting callback (up to {CONFIG.timeout} s)...")
+    progress = FetchProgress(label="Awaiting callback...")
+    with live_rows([progress]):
+        raw = session.wait(token, CONFIG.timeout, progress)
     elapsed += time.monotonic() - start
 
     if raw is None:
@@ -642,11 +644,10 @@ def _await_async_result(
         console.print("No response url found, query may have failed.")
         return response, "ok", elapsed
 
-    with console.status("Querying response endpoint..."):
-        console.print(f"GET {response_url}")
-        response = CLIENT.get(response_url)
-        response.raise_for_status()
-        elapsed += response.elapsed.total_seconds()
+    console.print(f"GET {response_url}")
+    response = fetch(CLIENT, "GET", response_url)
+    response.raise_for_status()
+    elapsed += response.elapsed.total_seconds()
 
     console.print(
         f"total query elapsed time: {elapsed} (±{uncertainty})s"

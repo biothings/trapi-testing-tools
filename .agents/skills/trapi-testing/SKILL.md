@@ -49,8 +49,9 @@ contract and it is picked up.
 ## Using the CLI
 
 Every command has `--help`; interactive fuzzy selection kicks in when required
-arguments are omitted. Interactive/rich UI goes to **stderr**; only piped
-payloads go to **stdout**, which is what makes the pipelines below work.
+arguments are omitted. Interactive/rich UI (including the live progress bars,
+which also only render on a TTY) goes to **stderr**; only piped payloads go to
+**stdout**, which is what makes the pipelines below work.
 
 **Run queries** (`tt test`):
 ```bash
