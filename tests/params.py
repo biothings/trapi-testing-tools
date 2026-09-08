@@ -123,7 +123,12 @@ def composite(subtests: Sequence[type[Test]], /, name: str) -> type[Test]:
 
         return TestResult(len(failures) == 0, failures or None)
 
-    return type("Composite", (Test,), {"test": staticmethod(test), "__doc__": name})
+    # `subtests` is exposed so introspection (e.g. `tt manifest tests`) can unfold members.
+    return type(
+        "Composite",
+        (Test,),
+        {"test": staticmethod(test), "__doc__": name, "subtests": tuple(subtests)},
+    )
 
 
 class CountTest(Test):

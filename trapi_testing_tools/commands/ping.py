@@ -50,15 +50,18 @@ def ping(
         check_apps_responsive(list(CONFIG.environments.items()))
         return
 
-    selected = apps or (
-        _select_apps() if is_interactive() else [CONFIG.default_environment]
-    )
-    if not selected:
-        raise typer.Exit(0)
+    if apps:
+        selected = apps
+    elif is_interactive():
+        selected = _select_apps()
+        if not selected:
+            raise typer.Exit(0)
+    else:
+        console.print("No app(s) specified. Provide app name(s) or use --all.")
+        raise typer.Exit(1)
 
     resolved: list[tuple[str, dict[str, str]]] = []
-    for raw_name in selected:
-        name = CONFIG.default_environment if raw_name == "default" else raw_name
+    for name in selected:
         if name not in CONFIG.environments:
             valid_apps = ", ".join(key for key in CONFIG.environments)
             console.print(f"App must be one of configured apps: {valid_apps}")

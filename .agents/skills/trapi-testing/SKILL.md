@@ -159,14 +159,12 @@ explicitly so the fuzzy selection prompts never open.)
 
 ## Environments
 
-Selected with `-e <app>.<level>` (e.g. `shepherd.bte.ci`, `retriever.local`). The
-bare `<level>` also works for the default app (`retriever`), so `-e ci` == `-e
-retriever.ci`. Apps/levels come from `DEFAULT_ENVS` in `config.py`: `ars`,
-`gandalf`, `retriever`, the four `shepherd.<component>` apps
+Selected with `-e <app>.<level>` (e.g. `shepherd.bte.ci`, `retriever.local`).
+Apps/levels come from `DEFAULT_ENVS` in `config.py`: `ars`, `gandalf`,
+`retriever`, the four `shepherd.<component>` apps
 (`shepherd.aragorn`/`.arax`/`.bte`/`.sipr`), plus `nameres`/`nodenorm` for `tt
 norm`. `config.yaml` is a commented template by default; uncomment its
-`environments:` block to add or override services, and change
-`default_environment` there to shorten the `-e` you type most.
+`environments:` block to add or override services.
 
 ## Authoring a query
 

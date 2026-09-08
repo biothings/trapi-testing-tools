@@ -46,13 +46,9 @@ ASYNC_BASIC_CLIENT = httpx.AsyncClient(follow_redirects=True, timeout=None)
 
 
 ENVIRONMENT_MAPPING = dict[str, str]()
-default = None
 for env, levels in CONFIG.environments.items():
     for level, url in levels.items():
         ENVIRONMENT_MAPPING[f"{env}.{level}"] = url
-
-for level, url in CONFIG.environments[CONFIG.default_environment].items():
-    ENVIRONMENT_MAPPING[level] = url
 
 
 def is_interactive() -> bool:
