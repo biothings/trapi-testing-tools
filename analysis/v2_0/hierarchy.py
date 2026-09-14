@@ -17,7 +17,7 @@ class SupportGraphHierarchy(Analysis):
         if kg is None:
             return {"max_depth": 0, "max_depth_result": None, "hierarchy": []}
 
-        edges = kg.edges
+        edges = kg.edges_dict
         aux = message.auxiliary_graphs_dict
 
         max_depth = 1
@@ -49,9 +49,9 @@ class SupportGraphHierarchy(Analysis):
         for i, result in enumerate(message.results_list):
             result_hierarchy: dict[str, dict] = {}
             hierarchy.append(result_hierarchy)
-            for analysis in result.analyses:
+            for analysis in result.analyses_list:
                 # 2.0 unifies Analysis; edge_bindings may be absent on a path-only analysis.
-                for qedge_id, bindings in (analysis.edge_bindings or {}).items():
+                for qedge_id, bindings in analysis.edge_bindings_dict.items():
                     bound = result_hierarchy.setdefault(qedge_id, {})
                     for edge_id in bindings.ids:
                         prev = max_depth

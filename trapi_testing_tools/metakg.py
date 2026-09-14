@@ -256,7 +256,11 @@ def edge_supported(spec: EdgeSpec, metaedges: list[Any]) -> Support:
     object_set = Biolink.expand(set(spec.objects)) if spec.objects else None
 
     for subjects, predicates, objects, quals in _orientations(
-        subject_set, predicate_set, object_set, spec.predicates, spec.qualifier_constraints
+        subject_set,
+        predicate_set,
+        object_set,
+        spec.predicates,
+        spec.qualifier_constraints,
     ):
         matched, hits = _match(
             subjects, predicates, objects, metaedges, quals, spec.attribute_types
@@ -358,7 +362,9 @@ def render_support(results: list[Support], env: str, *, raw: bool) -> None:
         groups.setdefault(key, []).append(support)
 
     for key, group in groups.items():
-        console.print(Text("┌ ", style="rule.line") + (f"{key} · {env}" if key else env))
+        console.print(
+            Text("┌ ", style="rule.line") + (f"{key} · {env}" if key else env)
+        )
 
         for support in group:
             source = support.spec.source

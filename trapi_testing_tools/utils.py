@@ -19,6 +19,7 @@ from rich.console import (
     ConsoleOptions,
     ConsoleRenderable,
     Group,
+    RenderableType,
     RenderHook,
     RenderResult,
 )
@@ -437,7 +438,7 @@ def _check_apps_responsive(
     apps: list[tuple[str, dict[str, str]]], loop: asyncio.AbstractEventLoop
 ) -> None:
     """Render and run every app's checks concurrently on a shared event loop."""
-    group_items = list[ConsoleRenderable]()
+    group_items = list[RenderableType]()
     runners = list[Coroutine[Any, Any, None]]()
 
     for app_name, instances in apps:

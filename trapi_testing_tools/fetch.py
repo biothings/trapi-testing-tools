@@ -33,16 +33,31 @@ _INDICATOR = "green"  # bar accent; label text stays the terminal default
 # cycled at `_FPS`. Each frame is a full-width braille picture — edit freely; see
 # `scratchpad/braille-palette.txt` for every cell and its dot bits.
 _SPIN_FRAMES = (
-    "⠉⠁⠀", "⠈⠉⠀", "⠀⠉⠁", "⠀⠈⠉", "⠀⠀⠙", "⠀⠀⠸",
-    "⠀⠀⢰", "⠀⠀⣠", "⠀⢀⣀", "⠀⣀⡀", "⢀⣀⠀", "⣀⡀⠀",
-    "⣄⠀⠀", "⡆⠀⠀", "⠇⠀⠀", "⠋⠀⠀",
+    "⠉⠁⠀",
+    "⠈⠉⠀",
+    "⠀⠉⠁",
+    "⠀⠈⠉",
+    "⠀⠀⠙",
+    "⠀⠀⠸",
+    "⠀⠀⢰",
+    "⠀⠀⣠",
+    "⠀⢀⣀",
+    "⠀⣀⡀",
+    "⢀⣀⠀",
+    "⣀⡀⠀",
+    "⣄⠀⠀",
+    "⡆⠀⠀",
+    "⠇⠀⠀",
+    "⠋⠀⠀",
 )
 
 
 def _bar(fraction: float) -> str:
     """A `_BAR_CELLS`-cell braille bar filled left-to-right to ``fraction`` (0 to 1)."""
     dots = round(max(0.0, min(fraction, 1.0)) * _BAR_CELLS * 8)
-    return "".join(_CELL_LEVELS[max(0, min(dots - i * 8, 8))] for i in range(_BAR_CELLS))
+    return "".join(
+        _CELL_LEVELS[max(0, min(dots - i * 8, 8))] for i in range(_BAR_CELLS)
+    )
 
 
 def _spin(frame: int) -> str:
@@ -75,10 +90,14 @@ class FetchProgress:
             widget = _spin(int(elapsed_s * _FPS))
             counts = f" {format_size(self.downloaded)}" if self.downloaded else ""
 
-        return Text.assemble((widget, _INDICATOR), " ", self.label, counts, f" {elapsed_s:.1f}s")
+        return Text.assemble(
+            (widget, _INDICATOR), " ", self.label, counts, f" {elapsed_s:.1f}s"
+        )
 
 
-def _materialize(response: httpx.Response, chunks: bytes, start: float) -> httpx.Response:
+def _materialize(
+    response: httpx.Response, chunks: bytes, start: float
+) -> httpx.Response:
     """Rebuild a fully-read `httpx.Response` from streamed chunks, stamping `.elapsed`."""
     result = httpx.Response(
         status_code=response.status_code,
@@ -150,7 +169,9 @@ async def stream_into(
     async with client.stream(method, url, **kwargs) as response:
         progress.total = int(response.headers.get("Content-Length") or 0)
         chunks = bytearray()
-        async for chunk in response.aiter_raw():  # raw (undecoded) bytes; headers stay valid
+        async for (
+            chunk
+        ) in response.aiter_raw():  # raw (undecoded) bytes; headers stay valid
             chunks.extend(chunk)
             progress.downloaded = len(chunks)
 

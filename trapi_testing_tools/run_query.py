@@ -1,5 +1,6 @@
 import importlib
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import ModuleType
@@ -74,7 +75,7 @@ _MAX_STATUS_NOT_FOUND = 3
 
 
 def run_queries(  # noqa: PLR0913, PLR0912, PLR0915
-    files: list[Path | ModuleType],
+    files: Sequence[Path | ModuleType],
     targets: list[tuple[str, str]],
     output_modes: OutputModes,
     save_path: Path | None = None,
@@ -113,7 +114,9 @@ def run_queries(  # noqa: PLR0913, PLR0912, PLR0915
             # A pre-built module (e.g. `tt query`) skips the file discovery/import steps.
             if isinstance(path, ModuleType):
                 query = path
-                file = Path(cast(str, path.__file__)).resolve().relative_to(package_root)
+                file = (
+                    Path(cast(str, path.__file__)).resolve().relative_to(package_root)
+                )
             else:
                 file = path.resolve().relative_to(package_root)
                 if file.suffix != ".py":
@@ -253,9 +256,7 @@ def _emit_diff(  # noqa: PLR0913
     render_verdict(deltas)
 
 
-def _step_counts(
-    response: httpx.Response, version: TrapiVersion
-) -> StepCounts | None:
+def _step_counts(response: httpx.Response, version: TrapiVersion) -> StepCounts | None:
     """Content-shape counts for a step's response, or None when it isn't valid TRAPI.
 
     Reuses the battery's memoized parse (same version), so no second full parse.
@@ -340,7 +341,9 @@ def _run_step(
         state.query_passed = state.query_passed and step_passed
 
         if state.collect:
-            counts = _step_counts(run.response, query.trapi_version) if state.shape else None
+            counts = (
+                _step_counts(run.response, query.trapi_version) if state.shape else None
+            )
             state.steps.append(
                 build_step(
                     run,
@@ -697,7 +700,9 @@ def _await_async_result(
     """Poll asyncquery_status to completion, then fetch the final response."""
     job_id = body.get("job_id")
     if not job_id:
-        console.print("Async submit response has no 'job_id'; cannot poll.", style="red")
+        console.print(
+            "Async submit response has no 'job_id'; cannot poll.", style="red"
+        )
         return response, "error", elapsed
 
     status_url = url + "/asyncquery_status/" + job_id

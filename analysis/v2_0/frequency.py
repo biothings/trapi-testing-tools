@@ -16,7 +16,7 @@ class NodeFrequency(Analysis):
         kg = response.message.knowledge_graph
         counts: Counter[CURIE] = Counter()
         if kg is not None:
-            for edge in kg.edges.values():
+            for edge in kg.edges_dict.values():
                 counts[edge.subject] += 1
                 counts[edge.object] += 1
         # most_common() orders by descending frequency; dict preserves that order.

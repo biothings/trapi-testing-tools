@@ -4,9 +4,8 @@ from re import Pattern
 from typing import override
 
 import typer
-from click import Context
-from click.core import Command
 from rich.console import Console
+from typer._click import Command, Context
 from typer.core import TyperGroup
 
 from trapi_testing_tools.commands.analyze import app as analyze_app

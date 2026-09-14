@@ -112,7 +112,9 @@ def _split_route(path: str) -> tuple[str, str]:
             return "", ""
 
 
-def _read_chunked(stream: BufferedIOBase, progress: FetchProgress | None = None) -> bytes:
+def _read_chunked(
+    stream: BufferedIOBase, progress: FetchProgress | None = None
+) -> bytes:
     """Decode a `Transfer-Encoding: chunked` request body, updating `progress` if given."""
     chunks: list[bytes] = []
     received = 0
@@ -126,7 +128,9 @@ def _read_chunked(stream: BufferedIOBase, progress: FetchProgress | None = None)
         stream.readline()  # CRLF after chunk
         received += size
         if progress is not None:
-            progress.downloaded = received  # no total (chunked) → stays a spinner + counter
+            progress.downloaded = (
+                received  # no total (chunked) → stays a spinner + counter
+            )
     return b"".join(chunks)
 
 

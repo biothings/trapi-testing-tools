@@ -87,7 +87,7 @@ def _apply_repeat(  # noqa: PLR0913
         "pipe": pipe,
         "against": against,
     }
-    typed = {
+    typed: set[str] = {
         name
         for name in _REPEATABLE_PARAMS
         if ctx.get_parameter_source(name) == ParameterSource.COMMANDLINE

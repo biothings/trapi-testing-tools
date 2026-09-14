@@ -63,9 +63,13 @@ def _resolve_nameres(values: list[str] | None) -> list[str] | None:
 
         name = value[len(NAMERES_PREFIX) :].strip()
         try:
-            hits = resolve_names([name], base_url=base_url, limit=1, types=[], autocomplete=True)
+            hits = resolve_names(
+                [name], base_url=base_url, limit=1, types=[], autocomplete=True
+            )
         except Exception as error:
-            console.print(f"Name Resolver lookup for {name!r} failed: {error!r}", style="red")
+            console.print(
+                f"Name Resolver lookup for {name!r} failed: {error!r}", style="red"
+            )
             raise typer.Exit(1) from error
 
         hit = hits[0] if isinstance(hits, list) and hits else None
@@ -114,11 +118,15 @@ def _build_module(
 def query(  # noqa: PLR0913
     subject_category: Annotated[
         list[str] | None,
-        typer.Option("--subject-category", "--sc", help="Category CURIE(s) for the subject node."),
+        typer.Option(
+            "--subject-category", "--sc", help="Category CURIE(s) for the subject node."
+        ),
     ] = None,
     object_category: Annotated[
         list[str] | None,
-        typer.Option("--object-category", "--oc", help="Category CURIE(s) for the object node."),
+        typer.Option(
+            "--object-category", "--oc", help="Category CURIE(s) for the object node."
+        ),
     ] = None,
     subject_ids: Annotated[
         list[str] | None,
@@ -165,11 +173,18 @@ def query(  # noqa: PLR0913
     ] = False,
     trapi_version: Annotated[
         str,
-        typer.Option("--trapi-version", "--tv", help="TRAPI version for response parsing and battery selection."),
+        typer.Option(
+            "--trapi-version",
+            "--tv",
+            help="TRAPI version for response parsing and battery selection.",
+        ),
     ] = "1.6",
     no_tests: Annotated[
         bool,
-        typer.Option("--no-tests", help="Send the query without running the standard test battery."),
+        typer.Option(
+            "--no-tests",
+            help="Send the query without running the standard test battery.",
+        ),
     ] = False,
     environment: Annotated[
         list[str] | None,
@@ -182,7 +197,9 @@ def query(  # noqa: PLR0913
     ] = None,
     debug: Annotated[
         bool,
-        typer.Option("--debug", "-d", help="Only surface the response when the query fails."),
+        typer.Option(
+            "--debug", "-d", help="Only surface the response when the query fails."
+        ),
     ] = False,
     view: Annotated[
         bool | None,
@@ -199,7 +216,9 @@ def query(  # noqa: PLR0913
     ] = None,
     no_save: Annotated[
         bool,
-        typer.Option("--no-save", "-S", help="Don't save response and skip prompts to do so."),
+        typer.Option(
+            "--no-save", "-S", help="Don't save response and skip prompts to do so."
+        ),
     ] = False,
     pipe: Annotated[
         PipeMode | None,
@@ -237,7 +256,10 @@ def query(  # noqa: PLR0913
         raise typer.Exit(1)
 
     if trapi_version not in ("1.6", "2.0"):
-        console.print(f"--trapi-version must be '1.6' or '2.0', got {trapi_version!r}.", style="red")
+        console.print(
+            f"--trapi-version must be '1.6' or '2.0', got {trapi_version!r}.",
+            style="red",
+        )
         raise typer.Exit(1)
 
     subject_ids = _resolve_nameres(subject_ids)
@@ -264,11 +286,15 @@ def query(  # noqa: PLR0913
         "/asyncquery" if is_async else "/query",
         tests,
         trapi_version,
-        _slug(subject_ids or subject_category, predicate, object_ids or object_category),
+        _slug(
+            subject_ids or subject_category, predicate, object_ids or object_category
+        ),
     )
 
     environment, _ = set_environment(environment)
-    output_modes = set_output_modes(view, save, no_save, pipe is not None, [module], allow_multi=True)
+    output_modes = set_output_modes(
+        view, save, no_save, pipe is not None, [module], allow_multi=True
+    )
     targets = [(env, ENVIRONMENT_MAPPING[env]) for env in environment]
 
     passed = run_queries(

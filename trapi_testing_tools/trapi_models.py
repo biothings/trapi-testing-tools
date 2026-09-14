@@ -56,7 +56,9 @@ def detect_version(schema_version: str | None) -> TrapiVersion | None:
     return next((v for v in SUPPORTED_VERSIONS if v == major_minor), None)
 
 
-def semantic_validate(model: object, version: TrapiVersion | None = None) -> object:
+def semantic_validate(
+    model: object, version: TrapiVersion | None = None
+) -> tuple[list, list]:
     """Run the version-appropriate `semantic_validate` on a parsed model."""
     return _SEMANTIC_VALIDATORS[resolve(version)](model)
 

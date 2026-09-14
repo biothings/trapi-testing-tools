@@ -24,7 +24,7 @@ _CTX = {"ignore_unknown_options": True, "allow_extra_args": True}
 def _adjacency(kg: KnowledgeGraph) -> dict[CURIE, set[CURIE]]:
     """Directed subject->object adjacency, excluding support-graph-backed edges."""
     adjacency: dict[CURIE, set[CURIE]] = defaultdict(set)
-    for edge in kg.edges.values():
+    for edge in kg.edges_dict.values():
         if edge.support_graphs:
             continue
         adjacency[edge.subject].add(edge.object)
@@ -55,8 +55,8 @@ def _pinned_trace_nodes(response: Response) -> list[CURIE]:
     if qg is None:
         return []
     # 2.0 unifies the graph: a pathfinder query carries `paths` (QPath), not `edges`
-    if getattr(qg, "paths", None):
-        qpath = next(iter(qg.paths.values()))
+    if qg.paths_dict:
+        qpath = next(iter(qg.paths_dict.values()))
         ordered = [
             qg.nodes[qnode_id]
             for qnode_id in (qpath.subject, qpath.object)

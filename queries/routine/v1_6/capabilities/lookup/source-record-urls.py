@@ -9,7 +9,10 @@ body = {
     "message": {
         "query_graph": {
             "nodes": {
-                "n0": {"categories": ["biolink:SmallMolecule"], "ids": ["CHEBI:114785"]},
+                "n0": {
+                    "categories": ["biolink:SmallMolecule"],
+                    "ids": ["CHEBI:114785"],
+                },
                 "n1": {"categories": ["biolink:Gene"], "ids": ["NCBIGene:1956"]},
             },
             "edges": {

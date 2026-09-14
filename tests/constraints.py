@@ -8,6 +8,7 @@ from collections import Counter
 from typing import Any, override
 
 import httpx
+from translator_tom.v2_0 import Edge, EdgeID, Response
 
 from tests import trapi
 from tests.base_test import Test, TestResult
@@ -16,10 +17,10 @@ from tests.params import bind
 from trapi_testing_tools.trapi_models import models
 
 
-def _kg_edges(model: object) -> dict[str, object]:
+def _kg_edges(model: Response) -> dict[EdgeID, Edge]:
     """The knowledge-graph edges of a parsed response (empty when absent)."""
     kg = model.message.knowledge_graph
-    return kg.edges if kg else {}
+    return kg.edges_dict if kg else {}
 
 
 class EdgesSatisfyKLAT(Test):
@@ -126,7 +127,7 @@ class EdgesSatisfyQualifiers(Test):
         for edge_id, edge in _kg_edges(model).items():
             edge_quals = {
                 qual.qualifier_type_id: qual.qualifier_value
-                for qual in (edge.qualifiers or [])
+                for qual in edge.qualifiers_list
             }
             satisfied = any(
                 all(edge_quals.get(tid) == value for tid, value in required.items())
@@ -233,7 +234,7 @@ class CollatedResultsUnique(Test):
             return model
 
         query_graph = model.message.query_graph
-        qedges = query_graph.edges if query_graph and query_graph.edges else {}
+        qedges = query_graph.edges_dict if query_graph else {}
         incident = {
             qeid for qeid, qe in qedges.items() if qnode in (qe.subject, qe.object)
         }
@@ -247,13 +248,13 @@ class CollatedResultsUnique(Test):
             )
             edges = frozenset(
                 (qeid, frozenset(binding_ids(binding)))
-                for analysis in (result.analyses or [])
-                for qeid, binding in (analysis.edge_bindings or {}).items()
+                for analysis in result.analyses_list
+                for qeid, binding in analysis.edge_bindings_dict.items()
                 if qedges and qeid not in incident
             )
             return nodes, edges
 
-        keys = [collapse_key(result) for result in (model.message.results or [])]
+        keys = [collapse_key(result) for result in model.message.results_list]
         collided = sum(count for count in Counter(keys).values() if count > 1)
         return TestResult(
             collided == 0,

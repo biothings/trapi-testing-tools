@@ -92,7 +92,9 @@ def _list_analyses(version: str) -> None:
     raise typer.Exit()
 
 
-def _show_analysis_help(names: list[str], forwarded_args: list[str], version: str) -> None:
+def _show_analysis_help(
+    names: list[str], forwarded_args: list[str], version: str
+) -> None:
     """Show a named analysis' own argument help without reading a response, then exit."""
     for cls in set_analyses(names, version)[0]:
         if issubclass(cls, ParametrizedAnalysis):
@@ -136,7 +138,9 @@ def _build_envelope(  # noqa: PLR0913
     }
 
 
-def _select_analyses(names: list[str] | None, version: TrapiVersion) -> list[AnalysisClass]:
+def _select_analyses(
+    names: list[str] | None, version: TrapiVersion
+) -> list[AnalysisClass]:
     """Resolve analyses to run after the summary: named, else an interactive confirm+picker."""
     if names:
         return set_analyses(names, version)[0]
@@ -210,7 +214,9 @@ def analyze(  # noqa: PLR0913
     no_save: Annotated[
         bool,
         typer.Option(
-            "--no-save", "-S", help="Don't save analysis output and skip prompts to do so."
+            "--no-save",
+            "-S",
+            help="Don't save analysis output and skip prompts to do so.",
         ),
     ] = False,
     pipe: Annotated[
@@ -231,7 +237,10 @@ def analyze(  # noqa: PLR0913
     (e.g. `tt analyze r.json -a PathCount -- --start <C> --end <C>`).
     """
     if analysis and no_analysis:
-        console.print("ERROR: --analysis/-a and --no-analysis/-A are mutually exclusive.", style="red")
+        console.print(
+            "ERROR: --analysis/-a and --no-analysis/-A are mutually exclusive.",
+            style="red",
+        )
         raise typer.Exit(1)
 
     if list_analyses:
@@ -247,7 +256,9 @@ def analyze(  # noqa: PLR0913
         file = None
 
     if analysis and any(arg in ("--help", "-h") for arg in forwarded_args):
-        _show_analysis_help(analysis, forwarded_args, trapi_version or DEFAULT_TRAPI_VERSION)
+        _show_analysis_help(
+            analysis, forwarded_args, trapi_version or DEFAULT_TRAPI_VERSION
+        )
 
     if file is None and is_interactive():
         file = select_response()
@@ -283,7 +294,9 @@ def analyze(  # noqa: PLR0913
             [] if no_analysis else _select_analyses(analysis, version)
         )
         output_modes = set_output_modes(view, save, no_save, False, selected)
-        run_analyses_inline(console, model, selected, forwarded_args, output_modes, save)
+        run_analyses_inline(
+            console, model, selected, forwarded_args, output_modes, save
+        )
 
         view_mode, _ = output_modes
         handle_output(
