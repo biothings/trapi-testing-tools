@@ -1,7 +1,7 @@
 from tests.battery import standard_battery_2_0
 from tests.constraints import EdgesSatisfyAttributes
 
-# 2.0 constraints.attributes: the old attribute_constraints (here z_score > 5)
+# 2.0 constraints.attributes: the old attribute_constraints (here evidence_count > 5)
 trapi_version = "2.0"
 method = "POST"
 endpoint = "/query"
@@ -11,7 +11,7 @@ body = {
         "query_graph": {
             "nodes": {
                 "n0": {"categories": ["biolink:Gene"], "ids": ["NCBIGene:3778"]},
-                "n1": {"categories": ["biolink:Disease"]},
+                "n1": {"categories": ["biolink:Gene"]},
             },
             "edges": {
                 "e01": {
@@ -21,7 +21,7 @@ body = {
                     "constraints": {
                         "attributes": [
                             {
-                                "id": "biolink:z_score",
+                                "id": "biolink:evidence_count",
                                 "operator": ">",
                                 "value": 5,
                             }
@@ -35,6 +35,6 @@ body = {
 tests = [
     *standard_battery_2_0(),
     EdgesSatisfyAttributes.expect(
-        {"id": "biolink:z_score", "operator": ">", "value": 5}
+        {"id": "biolink:evidence_count", "operator": ">", "value": 5}
     ),
 ]

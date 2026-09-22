@@ -1,7 +1,8 @@
 """TRAPI 2.0 behavioral tests (constraint honoring, parameter echo, COLLATE) — 2.0-only.
 
-KL/AT, sources, and qualifier checks are literal (no Biolink hierarchy expansion); attribute
-constraints delegate to TOM's operator engine (`Edge.meets_attribute_constraints`).
+KL/AT and sources checks are literal (no Biolink hierarchy expansion); qualifier and attribute
+constraints delegate to TOM (`Edge.meets_qualifier_constraints` / `meets_attribute_constraints`),
+so qualifier type/value matching honors the Biolink hierarchy.
 """
 
 from collections import Counter
@@ -121,19 +122,16 @@ class EdgesSatisfyQualifiers(Test):
         if isinstance(model, TestResult):
             return model
 
-        # A constraint's qualifier-sets are OR'd; the pairs within a set are AND'd (literal match).
-        required_sets = [dict(pairs) for pairs in sets]
+        # Sets are OR'd, pairs within a set AND'd; delegate to TOM so type/value matching
+        # honors the Biolink hierarchy (e.g. 'expression' descends from 'activity_or_abundance').
+        constraints = [dict(pairs) for pairs in sets]
         violations: list[str] = []
         for edge_id, edge in _kg_edges(model).items():
-            edge_quals = {
-                qual.qualifier_type_id: qual.qualifier_value
-                for qual in edge.qualifiers_list
-            }
-            satisfied = any(
-                all(edge_quals.get(tid) == value for tid, value in required.items())
-                for required in required_sets
-            )
-            if not satisfied:
+            if not edge.meets_qualifier_constraints(constraints):
+                edge_quals = {
+                    qual.qualifier_type_id: qual.qualifier_value
+                    for qual in edge.qualifiers_list
+                }
                 violations.append(f"{edge_id}: qualifiers={edge_quals}")
         return TestResult(len(violations) == 0, violations or None)
 

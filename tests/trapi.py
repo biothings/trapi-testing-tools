@@ -139,3 +139,19 @@ class Semantic(Test):
 
         info = [f"(warning) {_format_finding(w)}" for w in warnings] or None
         return TestResult(True, info)
+
+
+class HasDataReleaseVersions(Test):
+    """response advertises data_release_versions."""
+
+    @override
+    @staticmethod
+    def test(response: httpx.Response) -> TestResult:
+        model = parse_or_fail(response)
+        if isinstance(model, TestResult):
+            return model
+
+        versions = model.data_release_versions_dict
+        return TestResult(
+            bool(versions), None if versions else "response has no data_release_versions"
+        )

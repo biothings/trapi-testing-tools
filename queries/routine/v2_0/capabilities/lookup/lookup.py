@@ -1,3 +1,4 @@
+from tests import trapi
 from tests.battery import standard_battery_2_0
 
 trapi_version = "2.0"
@@ -21,4 +22,4 @@ body = {
         }
     },
 }
-tests = standard_battery_2_0()
+tests = [*standard_battery_2_0(), trapi.HasDataReleaseVersions]
