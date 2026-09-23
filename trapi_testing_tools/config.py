@@ -17,6 +17,7 @@ DEFAULT_ENVS = {
         "dev": "https://ars-dev.transltr.io",
     },
     "gandalf": {
+        "local": "http://localhost:6429",
         "dev": "https://gandalf.renci.org",
         "ci": "http://tier0-dogpark.ci.transltr.io:6429",
         "test": "http://tier0-dogpark.test.transltr.io:6429",
@@ -28,21 +29,25 @@ DEFAULT_ENVS = {
         "test": "https://retriever.test.transltr.io",
     },
     "shepherd.aragorn": {
+        "local": "http://localhost:5439/aragorn",
         "dev": "https://shepherd.renci.org/aragorn",
         "ci": "https://shepherd.ci.transltr.io/aragorn",
         "test": "https://shepherd.test.transltr.io/aragorn",
     },
     "shepherd.arax": {
+        "local": "http://localhost:5439/arax",
         "dev": "https://shepherd.renci.org/arax",
         "ci": "https://shepherd.ci.transltr.io/arax",
         "test": "https://shepherd.test.transltr.io/arax",
     },
     "shepherd.bte": {
+        "local": "http://localhost:5439/bte",
         "dev": "https://shepherd.renci.org/bte",
         "ci": "https://shepherd.ci.transltr.io/bte",
         "test": "https://shepherd.test.transltr.io/bte",
     },
     "shepherd.sipr": {
+        "local": "http://localhost:5439/sipr",
         "dev": "https://shepherd.renci.org/sipr",
         "ci": "https://shepherd.ci.transltr.io/sipr",
         "test": "https://shepherd.test.transltr.io/sipr",
