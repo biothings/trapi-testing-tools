@@ -40,6 +40,8 @@ from trapi_testing_tools.types import HTTPMethod, Query
 SYNC_BASIC_CLIENT = httpx.Client(follow_redirects=True, timeout=None)
 ASYNC_BASIC_CLIENT = httpx.AsyncClient(follow_redirects=True, timeout=None)
 
+MAX_DETAIL_LINES = 50  # cap a test's printed detail panel; excess collapses to a "...+N more" line
+
 
 ENVIRONMENT_MAPPING = dict[str, str]()
 for env, levels in CONFIG.environments.items():
@@ -154,7 +156,11 @@ def render_test_result(
         if isinstance(info, str) and "\n" not in info:
             message += f" ({info})"
         else:
-            body = info if isinstance(info, str) else "\n".join(info)
+            lines = info.split("\n") if isinstance(info, str) else list(info)
+            if len(lines) > MAX_DETAIL_LINES:
+                hidden = len(lines) - MAX_DETAIL_LINES
+                lines = lines[:MAX_DETAIL_LINES] + [f"...+{hidden} more"]
+            body = "\n".join(lines)
             detail = Panel(
                 Text(body),
                 title="details",

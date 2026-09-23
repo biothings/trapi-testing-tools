@@ -11,7 +11,7 @@ body = {
         "query_graph": {
             "nodes": {
                 "n0": {"categories": ["biolink:Gene"], "ids": ["NCBIGene:3778"]},
-                "n1": {"categories": ["biolink:Disease"]},
+                "n1": {},
             },
             "edges": {
                 "e01": {
@@ -21,7 +21,7 @@ body = {
                     "constraints": {
                         "sources": {
                             "behavior": "ALLOW",
-                            "values": ["infores:ctd", "infores:disgenet"],
+                            "values": ["infores:ctd", "infores:chembl"],
                         }
                     },
                 }
@@ -31,5 +31,5 @@ body = {
 }
 tests = [
     *standard_battery_2_0(),
-    EdgesSatisfySources.expect("ALLOW", "infores:ctd", "infores:disgenet"),
+    EdgesSatisfySources.expect("ALLOW", "infores:ctd", "infores:chembl"),
 ]
