@@ -62,7 +62,9 @@ class MetaEdgesAdvertise(Test):
                 examples = ", ".join(
                     f"{e.subject} -{e.predicate}-> {e.object}" for e in missing[:3]
                 )
-                summary.append(f"{field}: {len(missing)}/{total} edges lack it ({examples})")
+                summary.append(
+                    f"{field}: {len(missing)}/{total} edges lack it ({examples})"
+                )
 
         return TestResult(len(summary) == 0, summary or None)
 

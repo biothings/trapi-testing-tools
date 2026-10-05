@@ -40,7 +40,9 @@ from trapi_testing_tools.types import HTTPMethod, Query
 SYNC_BASIC_CLIENT = httpx.Client(follow_redirects=True, timeout=None)
 ASYNC_BASIC_CLIENT = httpx.AsyncClient(follow_redirects=True, timeout=None)
 
-MAX_DETAIL_LINES = 50  # cap a test's printed detail panel; excess collapses to a "...+N more" line
+MAX_DETAIL_LINES = (
+    50  # cap a test's printed detail panel; excess collapses to a "...+N more" line
+)
 
 
 ENVIRONMENT_MAPPING = dict[str, str]()

@@ -153,5 +153,6 @@ class HasDataReleaseVersions(Test):
 
         versions = model.data_release_versions_dict
         return TestResult(
-            bool(versions), None if versions else "response has no data_release_versions"
+            bool(versions),
+            None if versions else "response has no data_release_versions",
         )
