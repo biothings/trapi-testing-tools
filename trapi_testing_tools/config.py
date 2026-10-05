@@ -21,11 +21,13 @@ DEFAULT_ENVS = {
         "dev": "https://gandalf.renci.org",
         "ci": "http://tier0-dogpark.ci.transltr.io:6429",
         "test": "http://tier0-dogpark.test.transltr.io:6429",
+        "prod": "http://tier0-dogpark.transltr.io:6429",
     },
     "retriever": {
         "local": "http://localhost:8080",
         "dev": "https://dev.retriever.biothings.io",
         "ci": "https://retriever.ci.transltr.io",
+        "prod": "https://retriever.transltr.io",
         "test": "https://retriever.test.transltr.io",
     },
     "shepherd.aragorn": {
@@ -33,24 +35,28 @@ DEFAULT_ENVS = {
         "dev": "https://shepherd.renci.org/aragorn",
         "ci": "https://shepherd.ci.transltr.io/aragorn",
         "test": "https://shepherd.test.transltr.io/aragorn",
+        "prod": "https://shepherd.transltr.io/aragorn",
     },
     "shepherd.arax": {
         "local": "http://localhost:5439/arax",
         "dev": "https://shepherd.renci.org/arax",
         "ci": "https://shepherd.ci.transltr.io/arax",
         "test": "https://shepherd.test.transltr.io/arax",
+        "prod": "https://shepherd.transltr.io/arax",
     },
     "shepherd.bte": {
         "local": "http://localhost:5439/bte",
         "dev": "https://shepherd.renci.org/bte",
         "ci": "https://shepherd.ci.transltr.io/bte",
         "test": "https://shepherd.test.transltr.io/bte",
+        "prod": "https://shepherd.transltr.io/bte",
     },
     "shepherd.sipr": {
         "local": "http://localhost:5439/sipr",
         "dev": "https://shepherd.renci.org/sipr",
         "ci": "https://shepherd.ci.transltr.io/sipr",
         "test": "https://shepherd.test.transltr.io/sipr",
+        "prod": "https://shepherd.transltr.io/sipr",
     },
     # Identifier services for `tt norm` (maturities per the SmartAPI registry).
     "nameres": {
