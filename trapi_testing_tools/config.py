@@ -19,9 +19,9 @@ DEFAULT_ENVS = {
     "gandalf": {
         "local": "http://localhost:6429",
         "dev": "https://gandalf.renci.org",
-        "ci": "http://tier0-dogpark.ci.transltr.io:6429",
-        "test": "http://tier0-dogpark.test.transltr.io:6429",
-        "prod": "http://tier0-dogpark.transltr.io:6429",
+        "ci": "https://tier0-dogpark.ci.transltr.io",
+        "test": "https://tier0-dogpark.test.transltr.io",
+        "prod": "https://tier0-dogpark.transltr.io",
     },
     "retriever": {
         "local": "http://localhost:8080",
@@ -66,7 +66,7 @@ DEFAULT_ENVS = {
         "dev": "https://name-resolution-sri.renci.org",
     },
     "nodenorm": {
-        "prod": "https://nodenorm.transltr.io",
+        "prod": "https://nodenorm-es.transltr.io",
         "ci": "https://nodenorm-es.ci.transltr.io",
         "test": "https://nodenorm-es.test.transltr.io",
         "dev": "https://nodenormalization-sri.renci.org",

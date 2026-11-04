@@ -367,6 +367,8 @@ def _health_check_path(app_name: str) -> str:
     """The endpoint whose presence signals an app is up (405 to a GET means live)."""
     if app_name == "ars" or app_name.startswith("ars."):
         return "/ars/api/submit"
+    if app_name in ("nodenorm", "nameres"):
+        return ""
     return "/query"
 
 
