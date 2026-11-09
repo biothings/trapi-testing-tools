@@ -69,7 +69,6 @@ DEFAULT_ENVS = {
         "prod": "https://nodenorm-es.transltr.io",
         "ci": "https://nodenorm-es.ci.transltr.io",
         "test": "https://nodenorm-es.test.transltr.io",
-        "dev": "https://nodenormalization-sri.renci.org",
     },
 }
 
